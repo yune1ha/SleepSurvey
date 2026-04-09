@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>수면 설문지 시스템</title>
+    <style>
+        :root {
+            --p-color: #2c3e50;
+            --a-color: #3498db;
+            --green: #27ae60;
+            --red: #e74c3c;
+            --bg: #f5f7f9;
+            --border: #ced4da;
+            --card-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            background: var(--bg);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px 60px;
+        }
+
+        /* 헤더 */
+        .page-header {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+        .page-header h1 {
+            font-size: 1.8em;
+            color: var(--p-color);
+            margin-bottom: 6px;
+        }
+        .page-header p {
+            color: #888;
+            font-size: 0.95em;
+        }
+
+        /* 입력 카드 */
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            padding: 36px 40px;
+            width: 100%;
+            max-width: 520px;
+        }
+
+        .field-group {
+            margin-bottom: 24px;
+        }
+        .field-group label {
+            display: block;
+            font-weight: bold;
+            color: var(--p-color);
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+        .field-group input[type="text"],
+        .field-group input[type="date"] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 6px;
+            font-size: 1em;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .field-group input:focus {
+            border-color: var(--a-color);
+        }
+
+        /* 만 나이 표시 */
+        .age-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 5px 14px;
+            background: #eaf4fb;
+            border: 1px solid #b8dcf0;
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: var(--a-color);
+            font-weight: bold;
+            min-height: 30px;
+        }
+
+        /* 두통 Y/N 버튼 */
+        .toggle-group {
+            display: flex;
+            gap: 12px;
+        }
+        .toggle-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            color: #555;
+        }
+        .toggle-btn:hover { background: #f0f0f0; }
+        .toggle-btn.selected-yes {
+            background: #fdf0ee;
+            border-color: var(--red);
+            color: var(--red);
+        }
+        .toggle-btn.selected-no {
+            background: #eafaf1;
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        /* 확인 버튼 */
+        #btn-confirm {
+            width: 100%;
+            padding: 15px;
+            background: var(--p-color);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+        #btn-confirm:hover { background: #1a252f; }
+        #btn-confirm:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        /* 오류 메시지 */
+        .error-msg {
+            color: var(--red);
+            font-size: 0.88em;
+            margin-top: 6px;
+            display: none;
+        }
+
+        /* ─── 결과 섹션 ─── */
+        #result-section {
+            width: 100%;
+            max-width: 520px;
+            margin-top: 32px;
+            display: none;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .result-header h2 {
+            font-size: 1.15em;
+            color: var(--p-color);
+        }
+        .patient-tag {
+            background: var(--p-color);
+            color: #fff;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.88em;
+        }
+
+        .survey-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .survey-card {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+            padding: 18px 22px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-left: 5px solid var(--border);
+        }
+        .survey-card.first {
+            border-left-color: var(--a-color);
+        }
+
+        .survey-order {
+            font-size: 1.4em;
+            font-weight: 800;
+            color: var(--border);
+            min-width: 28px;
+            text-align: center;
+        }
+        .survey-card.first .survey-order {
+            color: var(--a-color);
+        }
+
+        .survey-info {
+            flex: 1;
+        }
+        .survey-name {
+            font-weight: bold;
+            font-size: 1em;
+            color: var(--p-color);
+        }
+        .survey-desc {
+            font-size: 0.82em;
+            color: #999;
+            margin-top: 3px;
+        }
+
+        .btn-start {
+            padding: 9px 20px;
+            background: var(--a-color);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.95em;
+            cursor: pointer;
+            font-family: inherit;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+        .btn-start:hover { background: #2176ae; }
+
+        .btn-waiting {
+            padding: 9px 20px;
+            background: #f0f0f0;
+            color: #aaa;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95em;
+            font-family: inherit;
+            white-space: nowrap;
+            cursor: default;
+        }
+
+        /* 새 환자 버튼 */
+        #btn-new-patient {
+            width: 100%;
+            max-width: 520px;
+            margin-top: 16px;
+            padding: 12px;
+            background: none;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-weight: bold;
+            color: #888;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+            display: none;
+        }
+        #btn-new-patient:hover { border-color: var(--p-color); color: var(--p-color); }
+
+        /* 기존 세션 복원 배너 */
+        #session-banner {
+            width: 100%;
+            max-width: 520px;
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+            display: none;
+            font-size: 0.92em;
+            color: #795548;
+        }
+        #session-banner strong { display: block; margin-bottom: 6px; }
+        .banner-btns { display: flex; gap: 10px; margin-top: 10px; }
+        .banner-btn {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.9em;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .banner-btn-resume { background: #ff8f00; color: #fff; }
+        .banner-btn-discard { background: #eee; color: #555; }
+
+        /* 이용 안내 */
+        .guide-box {
+            width: 100%;
+            max-width: 520px;
+            margin-top: 28px;
+            padding: 16px 20px;
+            background: #f0f4f8;
+            border-radius: 8px;
+            font-size: 0.84em;
+            color: #666;
+            line-height: 1.8;
+        }
+        .guide-box strong { color: var(--p-color); }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="js/survey-nav.js"></script>
+</head>
+<body>
+
+<div class="page-header">
+    <h1>수면 설문지 시스템</h1>
+    <p>환자 정보를 입력하면 해당 설문지 조합이 자동으로 결정됩니다.</p>
+</div>
+
+<!-- 완료 배너 -->
+<div id="done-banner">
+    <h2>✓ 모든 설문이 완료되었습니다</h2>
+    <p>아래 버튼으로 모든 설문 결과를 Excel 파일 하나로 출력하세요.</p>
+    <button onclick="snExportAllResults()" style="
+        margin-top:18px; padding:13px 32px;
+        background:#27ae60; color:#fff; border:none; border-radius:8px;
+        font-size:1.05em; font-weight:bold; cursor:pointer;
+        font-family:inherit; transition:opacity 0.2s;
+    " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+        결과 출력 (Excel 통합 파일)
+    </button>
+    <p style="margin-top:12px;font-size:0.85em;color:#888;">새 환자를 입력하려면 아래 양식을 작성해주세요.</p>
+</div>
+
+<!-- 기존 세션 복원 배너 -->
+<div id="session-banner">
+    <strong>⚠️ 이전에 진행 중인 세션이 있습니다.</strong>
+    <span id="session-banner-info"></span>
+    <div class="banner-btns">
+        <button class="banner-btn banner-btn-resume" onclick="resumeSession()">이어서 진행</button>
+        <button class="banner-btn banner-btn-discard" onclick="discardSession()">새 환자로 시작</button>
+    </div>
+</div>
+
+<!-- 입력 카드 -->
+<div class="card" id="input-card">
+    <div class="field-group">
+        <label for="patient-id">병원 환자번호</label>
+        <input type="text" id="patient-id" placeholder="환자번호 입력 (숫자)" inputmode="numeric"
+               oninput="this.value=this.value.replace(/[^0-9]/g,''); validateForm()">
+        <div class="error-msg" id="err-id">환자번호를 입력해주세요.</div>
+    </div>
+
+    <div class="field-group">
+        <label for="birthdate">생년월일</label>
+        <input type="date" id="birthdate" onchange="updateAge(); validateForm()">
+        <div class="age-badge" id="age-display">생년월일 입력 시 만 나이가 표시됩니다</div>
+        <div class="error-msg" id="err-birth">생년월일을 입력해주세요.</div>
+    </div>
+
+    <div class="field-group">
+        <label>두통 여부</label>
+        <div class="toggle-group">
+            <button class="toggle-btn" id="btn-yes" onclick="setHeadache(true)">예 (있음)</button>
+            <button class="toggle-btn" id="btn-no" onclick="setHeadache(false)">아니오 (없음)</button>
+        </div>
+        <div class="error-msg" id="err-ha">두통 여부를 선택해주세요.</div>
+    </div>
+
+    <button id="btn-confirm" onclick="confirmEntry()" disabled>확인 →</button>
+</div>
+
+<!-- 결과 섹션 -->
+<div id="result-section">
+    <div class="result-header">
+        <h2>필요 설문지 목록</h2>
+        <span class="patient-tag" id="result-patient-tag">환자번호 —</span>
+    </div>
+    <div class="survey-cards" id="survey-cards"></div>
+</div>
+
+<button id="btn-new-patient" onclick="resetForm()">＋ 새 환자 입력</button>
+
+<div class="guide-box">
+    <strong>이용 방법</strong><br>
+    ① 환자번호, 생년월일, 두통 여부 입력 후 <strong>확인</strong><br>
+    ② 필요한 설문지 목록이 자동으로 표시됩니다<br>
+    ③ <strong>시작</strong> 버튼을 눌러 첫 번째 설문 진행<br>
+    ④ 각 설문 완료 후 <strong>다음 설문으로</strong> 버튼으로 이동
+</div>
+
+<script>
+    // ─── 상태 ───────────────────────────────────────────────
+    const SESSION_KEY = 'sleepSurvey_session';
+    let headacheSelected = null; // true / false / null
+
+    const SURVEY_META = {
+        'SDQ.html':       { name: 'SDQ — 강점·난점 설문지',           desc: '25문항 · 지난 6개월 기준' },
+        'K-CSHQ.html':    { name: 'K-CSHQ — 소아 수면 습관 설문지',   desc: '46문항 · 주관식 포함' },
+        'PED_MIDAS.html': { name: 'PED-MIDAS — 두통 영향 설문지',     desc: '6문항 · 지난 3개월 기준' },
+        'BISQ-R.html':    { name: 'BISQ-R — 영아 수면 설문지',        desc: '34문항 · 영아 전용' },
+        'PDSS.html':      { name: 'PDSS — 주간 졸림 척도',            desc: '8문항 · 6세 이상' }
+    };
+
+    // ─── 완료 배너 스타일 ────────────────────────────────────
+    const doneStyle = document.createElement('style');
+    doneStyle.textContent = `
+        #done-banner {
+            width: 100%; max-width: 520px;
+            background: #eafaf1; border: 2px solid #27ae60;
+            border-radius: 12px; padding: 28px 32px;
+            text-align: center; margin-bottom: 20px; display: none;
+        }
+        #done-banner h2 { color: #27ae60; margin-bottom: 8px; font-size: 1.4em; }
+        #done-banner p  { color: #555; font-size: 0.95em; margin: 0; }
+    `;
+    document.head.appendChild(doneStyle);
+
+    // ─── 초기화 ─────────────────────────────────────────────
+    window.onload = function () {
+        // 설문 페이지에서 돌아올 때 URL 파라미터로 전달된 세션/결과 복원
+        (function _restoreFromUrl() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const rawS = params.get('sn_s');
+                const rawR = params.get('sn_r');
+                const rawA = params.get('sn_a');
+                if (rawS) localStorage.setItem('sleepSurvey_session',    decodeURIComponent(atob(rawS)));
+                if (rawR) localStorage.setItem('sleepSurvey_results',    decodeURIComponent(atob(rawR)));
+                if (rawA) localStorage.setItem('sleepSurvey_allResults', decodeURIComponent(atob(rawA)));
+                if (rawS || rawR || rawA) history.replaceState(null, '', window.location.pathname);
+            } catch (e) {}
+        })();
+
+        // 모든 설문 완료 후 돌아온 경우
+        if (new URLSearchParams(window.location.search).get('done') === '1') {
+            const banner = document.getElementById('done-banner');
+            if (banner) {
+                banner.style.display = 'block';
+                // URL 파라미터 제거 (새로고침 시 배너 반복 방지)
+                history.replaceState(null, '', window.location.pathname);
+            }
+            return;
+        }
+
+        const existing = loadSession();
+        if (existing && existing.patientId) {
+            const info = document.getElementById('session-banner-info');
+            const surveyNames = existing.surveys.map(f => SURVEY_META[f]?.name.split('—')[0].trim() || f);
+            const idx = existing.currentSurveyIndex;
+            info.textContent =
+                `환자번호 ${existing.patientId} · 만 ${existing.age}세 · ` +
+                `진행 중: ${surveyNames[idx] || '완료'} (${idx + 1}/${existing.surveys.length})`;
+            document.getElementById('session-banner').style.display = 'block';
+        }
+    };
+
+    // ─── 만 나이 계산 ────────────────────────────────────────
+    function calcAge(birthdateStr) {
+        const today = new Date();
+        const birth = new Date(birthdateStr);
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+        return age;
+    }
+
+    function updateAge() {
+        const val = document.getElementById('birthdate').value;
+        const display = document.getElementById('age-display');
+        if (!val) {
+            display.textContent = '생년월일 입력 시 만 나이가 표시됩니다';
+            return;
+        }
+        const age = calcAge(val);
+        if (age < 0 || age > 30) {
+            display.textContent = '⚠ 생년월일을 확인해주세요';
+            display.style.background = '#fdecea';
+            display.style.borderColor = '#f5c6cb';
+            display.style.color = '#c0392b';
+        } else {
+            const groupLabel = age >= 6 ? '6세 이상 그룹' : '6세 미만 그룹';
+            display.textContent = `만 ${age}세 (${groupLabel})`;
+            display.style.background = '#eaf4fb';
+            display.style.borderColor = '#b8dcf0';
+            display.style.color = '#2980b9';
+        }
+    }
+
+    // ─── 두통 선택 ───────────────────────────────────────────
+    function setHeadache(val) {
+        headacheSelected = val;
+        document.getElementById('btn-yes').className =
+            'toggle-btn' + (val === true  ? ' selected-yes' : '');
+        document.getElementById('btn-no').className =
+            'toggle-btn' + (val === false ? ' selected-no'  : '');
+        document.getElementById('err-ha').style.display = 'none';
+        validateForm();
+    }
+
+    // ─── 유효성 검사 ─────────────────────────────────────────
+    function validateForm() {
+        const id   = document.getElementById('patient-id').value.trim();
+        const bday = document.getElementById('birthdate').value;
+        const ok = id && bday && headacheSelected !== null;
+        document.getElementById('btn-confirm').disabled = !ok;
+    }
+
+    // ─── 설문 배정 ───────────────────────────────────────────
+    function assignSurveys(age, hasHeadache) {
+        if (age >= 6) {
+            const surveys = ['SDQ.html', 'K-CSHQ.html'];
+            if (hasHeadache) surveys.push('PED_MIDAS.html');
+            surveys.push('PDSS.html');
+            return surveys;
+        } else {
+            const surveys = ['K-CSHQ.html', 'BISQ-R.html'];
+            if (hasHeadache) surveys.push('PED_MIDAS.html');
+            return surveys;
+        }
+    }
+
+    // ─── 확인 버튼 ───────────────────────────────────────────
+    function confirmEntry() {
+        // 유효성 최종 확인
+        const idVal = document.getElementById('patient-id').value.trim();
+        const bday  = document.getElementById('birthdate').value;
+        let valid = true;
+
+        if (!idVal) {
+            document.getElementById('err-id').style.display = 'block';
+            valid = false;
+        } else {
+            document.getElementById('err-id').style.display = 'none';
+        }
+        if (!bday) {
+            document.getElementById('err-birth').style.display = 'block';
+            valid = false;
+        } else {
+            document.getElementById('err-birth').style.display = 'none';
+        }
+        if (headacheSelected === null) {
+            document.getElementById('err-ha').style.display = 'block';
+            valid = false;
+        }
+        if (!valid) return;
+
+        const age = calcAge(bday);
+        const surveys = assignSurveys(age, headacheSelected);
+
+        // 이전 환자의 설문 결과 초기화
+        localStorage.removeItem('sleepSurvey_results');
+
+        const session = {
+            patientId: idVal,
+            birthdate: bday,
+            age: age,
+            hasHeadache: headacheSelected,
+            surveys: surveys,
+            currentSurveyIndex: 0
+        };
+        saveSession(session);
+        showResultSection(session);
+    }
+
+    // ─── 결과 섹션 표시 ──────────────────────────────────────
+    function showResultSection(session) {
+        document.getElementById('result-section').style.display = 'block';
+        document.getElementById('btn-new-patient').style.display = 'block';
+
+        document.getElementById('result-patient-tag').textContent =
+            `환자번호 ${session.patientId} · 만 ${session.age}세`;
+
+        const container = document.getElementById('survey-cards');
+        container.innerHTML = '';
+
+        const basePath = 'surveys/';
+
+        session.surveys.forEach((file, idx) => {
+            const meta = SURVEY_META[file] || { name: file, desc: '' };
+            const card = document.createElement('div');
+            card.className = 'survey-card' + (idx === 0 ? ' first' : '');
+
+            const isFirst = idx === 0;
+            card.innerHTML = `
+                <div class="survey-order">${idx + 1}</div>
+                <div class="survey-info">
+                    <div class="survey-name">${meta.name}</div>
+                    <div class="survey-desc">${meta.desc}</div>
+                </div>
+                ${isFirst
+                    ? `<button class="btn-start" onclick="startSurvey()">시작 →</button>`
+                    : `<span class="btn-waiting">대기 중</span>`
+                }
+            `;
+            container.appendChild(card);
+        });
+
+        // 입력 카드 숨기기
+        document.getElementById('input-card').style.display = 'none';
+        document.getElementById('session-banner').style.display = 'none';
+    }
+
+    // ─── 첫 설문 시작 ────────────────────────────────────────
+    function startSurvey() {
+        const session = loadSession();
+        if (!session) return;
+        _goToSurvey(session.surveys[0]);
+    }
+
+    // ─── 새 환자 초기화 ──────────────────────────────────────
+    function resetForm() {
+        clearSession();
+        localStorage.removeItem('sleepSurvey_results');
+        headacheSelected = null;
+        document.getElementById('patient-id').value = '';
+        document.getElementById('birthdate').value = '';
+        document.getElementById('age-display').textContent = '생년월일 입력 시 만 나이가 표시됩니다';
+        document.getElementById('age-display').style.cssText = '';
+        document.getElementById('btn-yes').className = 'toggle-btn';
+        document.getElementById('btn-no').className = 'toggle-btn';
+        document.getElementById('btn-confirm').disabled = true;
+        document.getElementById('result-section').style.display = 'none';
+        document.getElementById('btn-new-patient').style.display = 'none';
+        document.getElementById('input-card').style.display = 'block';
+        document.getElementById('session-banner').style.display = 'none';
+        ['err-id', 'err-birth', 'err-ha'].forEach(id => {
+            document.getElementById(id).style.display = 'none';
+        });
+    }
+
+    // ─── 세션 복원 ───────────────────────────────────────────
+    function resumeSession() {
+        const session = loadSession();
+        if (!session) return;
+        const basePath = 'surveys/';
+        const idx = session.currentSurveyIndex;
+        if (idx >= session.surveys.length) {
+            // 이미 완료된 세션
+            alert('이미 완료된 세션입니다. 새 환자를 입력해주세요.');
+            discardSession();
+            return;
+        }
+        _goToSurvey(session.surveys[idx]);
+    }
+
+    // ─── 설문 페이지 이동 (세션을 URL 파라미터로 전달) ──────────
+    // file:// 프로토콜에서는 경로가 달라 localStorage가 격리되므로
+    // 세션/결과 데이터를 URL 파라미터(sn_s, sn_r)에 base64로 실어 보냄.
+    function _goToSurvey(filename) {
+        const s = localStorage.getItem('sleepSurvey_session');
+        const r = localStorage.getItem('sleepSurvey_results') || '{}';  // 항상 전달해 이전 환자 캐시 덮어쓰기
+        const a = localStorage.getItem('sleepSurvey_allResults');
+        const params = new URLSearchParams();
+        if (s) params.set('sn_s', btoa(encodeURIComponent(s)));
+        params.set('sn_r', btoa(encodeURIComponent(r)));
+        if (a) params.set('sn_a', btoa(encodeURIComponent(a)));
+        const query = params.toString();
+        window.location.href = 'surveys/' + filename + (query ? '?' + query : '');
+    }
+
+    function discardSession() {
+        clearSession();
+        localStorage.removeItem('sleepSurvey_results');
+        document.getElementById('session-banner').style.display = 'none';
+    }
+
+    // ─── localStorage 헬퍼 ───────────────────────────────────
+    function saveSession(data) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+    }
+    function loadSession() {
+        try { return JSON.parse(localStorage.getItem(SESSION_KEY)); }
+        catch { return null; }
+    }
+    function clearSession() {
+        localStorage.removeItem(SESSION_KEY);
+    }
+</script>
+
+</body>
+</html>

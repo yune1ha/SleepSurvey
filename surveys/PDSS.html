@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDSS 아동용 주간 졸림 척도</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../js/survey-nav.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
+        .container { display: flex; gap: 25px; max-width: 1300px; margin: auto; }
+        .survey-section { flex: 2.5; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .control-section { flex: 1; background: #f1f3f5; padding: 25px; border-radius: 12px; position: sticky; top: 20px; height: fit-content; border: 1px solid #dee2e6; }
+
+        h2 { border-bottom: 3px solid #007bff; padding-bottom: 12px; margin-top: 0; color: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #dee2e6; padding: 12px; text-align: center; }
+        th { background-color: #e9ecef; font-weight: bold; font-size: 0.95em; }
+        .question-text { text-align: left; width: 45%; font-size: 1.05em; line-height: 1.4; padding-left: 15px; }
+
+        input[type="radio"] {
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            accent-color: #007bff;
+        }
+
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1em; transition: 0.2s; }
+
+        .btn-calc { background-color: #28a745; color: white; width: 100%; font-size: 1.2em; margin-bottom: 10px; }
+        .btn-nav { background-color: #007bff; color: white; flex: 1; }
+        .btn-reset { background-color: #6c757d; color: white; flex: 1; }
+        .btn-exit { background-color: #dc3545; color: white; flex: 1; }
+        button:hover { opacity: 0.85; transform: translateY(-1px); }
+
+        .score-display { background: #ffffff; border: 3px solid #007bff; border-radius: 10px; padding: 25px; margin: 20px 0; text-align: center; }
+        .score-label { font-size: 1.1em; color: #495057; margin-bottom: 5px; }
+        #current-patient-id { font-size: 1.3em; font-weight: bold; color: #212529; display: block; margin-bottom: 10px; }
+        #current-score { font-size: 3.5em; font-weight: 800; color: #007bff; margin: 5px 0; }
+        .score-unit { font-size: 1.1em; color: #868e96; }
+
+        .asterisk { color: #e03131; font-weight: bold; margin-right: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="survey-section">
+        <h2>아동용 주간 졸림 척도 (PDSS)</h2>
+        <p style="color: #666;">※ 다음 질문들에 대해 가능한 솔직하게, 한 가지만 골라 표시 해주세요.</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>No.</th>
+                    <th>문항</th>
+                    <th>항상 (4)</th>
+                    <th>자주 (3)</th>
+                    <th>때때로 (2)</th>
+                    <th>드물게 (1)</th>
+                    <th>전혀 없음 (0)</th>
+                </tr>
+            </thead>
+            <tbody id="question-table"></tbody>
+        </table>
+    </div>
+
+    <div class="control-section" id="control-section">
+        <div class="score-display">
+            <div class="score-label">환자 번호</div>
+            <span id="current-patient-id">-</span>
+            <div class="score-label">계산된 총점</div>
+            <div id="current-score">0</div>
+            <div class="score-unit">점</div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-reset" onclick="resetCurrentForm()">초기화</button>
+            <button class="btn-exit" onclick="snGoHome()">홈으로</button>
+        </div>
+
+        <button class="btn-calc" onclick="processEntry()" style="margin-top:10px;">점수 계산</button>
+    </div>
+</div>
+
+<script>
+    const questions = [
+        { id: 1, text: "수업 시간 동안 얼마나 자주 잠에 들거나 졸리신가요?", reverse: false },
+        { id: 2, text: "숙제를 하는 동안 얼마나 자주 잠이 오거나 졸리신가요?", reverse: false },
+        { id: 3, text: "보통 하루 중 대부분의 시간 동안 정신이 맑게 깨어 있나요?", reverse: true },
+        { id: 4, text: "낮 동안 얼마나 자주 피곤하고 짜증나나요?", reverse: false },
+        { id: 5, text: "얼마나 자주 아침에 침대에서 나오는 데 어려움을 느끼나요?", reverse: false },
+        { id: 6, text: "얼마나 자주 아침에 깬 이후에 다시 잠을 자나요?", reverse: false },
+        { id: 7, text: "아침에 깨워 줄 사람이 얼마나 자주 필요한가요?", reverse: false },
+        { id: 8, text: "얼마나 자주 더 많은 수면이 필요하다고 생각하나요?", reverse: false }
+    ];
+
+    let db = [];
+    let curIdx = -1;
+
+    window.addEventListener('load', function () {
+        const tbody = document.getElementById('question-table');
+        questions.forEach(q => {
+            const row = document.createElement('tr');
+            const numLabel = q.reverse ? `<span class="asterisk">*</span>${q.id}` : q.id;
+            row.innerHTML = `
+                <td>${numLabel}</td>
+                <td class="question-text">${q.text}</td>
+                <td><input type="radio" name="q${q.id}" value="4"></td>
+                <td><input type="radio" name="q${q.id}" value="3"></td>
+                <td><input type="radio" name="q${q.id}" value="2"></td>
+                <td><input type="radio" name="q${q.id}" value="1"></td>
+                <td><input type="radio" name="q${q.id}" value="0"></td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        snInjectNavBar('PDSS.html');
+        snInjectSurveyNavButtons('PDSS.html', 'control-section');
+
+        const results = snGetResults();
+        if (results.PDSS) {
+            const saved = results.PDSS;
+            document.getElementById('current-patient-id').innerText = saved.patientId || '-';
+            document.getElementById('current-score').innerText = saved.score ?? 0;
+            Object.entries(saved.answers || {}).forEach(([qId, val]) => {
+                const radio = document.querySelector(`input[name="q${qId}"][value="${val}"]`);
+                if (radio) radio.checked = true;
+            });
+        }
+    });
+
+    function processEntry() {
+        const sess = snGetSession();
+        const id   = sess ? sess.patientId : '';
+        if (!id) { alert("세션 정보가 없습니다. 메인 페이지에서 다시 시작해주세요."); return; }
+
+        let score = 0;
+        let logs = {};
+        let missing = false;
+
+        questions.forEach(q => {
+            const sel = document.querySelector(`input[name="q${q.id}"]:checked`);
+            if (!sel) { missing = true; return; }
+
+            let val = parseInt(sel.value);
+            if (q.reverse) val = 4 - val;
+            score += val;
+            logs[q.id] = sel.value;
+        });
+
+        if (missing) { alert("모든 문항에 답변을 선택해주세요."); return; }
+
+        const found = db.findIndex(p => p.id === id);
+        if (found > -1) { db[found] = { id, score, logs }; curIdx = found; }
+        else            { db.push({ id, score, logs }); curIdx = db.length - 1; }
+
+        document.getElementById('current-patient-id').innerText = id;
+        document.getElementById('current-score').innerText = score;
+
+        snSaveResult('PDSS.html', {
+            patientId: id,
+            birthdate: sess ? sess.birthdate : '',
+            age:       sess ? sess.age       : '',
+            date:      new Date().toISOString().split('T')[0],
+            score:     score,
+            answers:   logs
+        });
+
+        alert(`환자 ${id}의 데이터가 저장되었습니다. 총점: ${score}점`);
+    }
+
+    function clearUI() {
+        document.getElementById('current-patient-id').innerText = '-';
+        document.getElementById('current-score').innerText = '0';
+        document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
+    }
+
+    function resetCurrentForm() {
+        if (confirm("입력 중인 내용을 초기화하시겠습니까?")) { clearUI(); }
+    }
+
+    // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+
+</script>
+
+</body>
+</html>

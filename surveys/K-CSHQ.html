@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-CSHQ 소아 수면 습관 설문 프로그램</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../js/survey-nav.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
+        .container { display: flex; gap: 25px; max-width: 1300px; margin: auto; }
+        .survey-section { flex: 2.5; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .control-section { flex: 1; background: #f1f3f5; padding: 25px; border-radius: 12px; position: sticky; top: 20px; height: fit-content; border: 1px solid #dee2e6; }
+
+        h2 { border-bottom: 3px solid #007bff; padding-bottom: 12px; margin-top: 0; color: #0056b3; }
+
+        .section-title {
+            background-color: #2c3e50;
+            color: white;
+            padding: 12px 18px;
+            border-radius: 5px;
+            margin-top: 30px;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .question-card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border: 1px solid #dee2e6;
+        }
+
+        .question-text {
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: block;
+            font-size: 1.05em;
+            line-height: 1.4;
+        }
+
+        .options {
+            display: flex;
+            gap: 12px;
+        }
+
+        .option-btn {
+            flex: 1;
+            padding: 14px 8px;
+            border: 2px solid #dee2e6;
+            background: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .option-btn:hover { background: #f8f9fa; }
+        .option-btn.selected { background: #3498db; color: white; border-color: #3498db; }
+
+        .subjective-card {
+            background: #eef2f3;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 5px solid #3498db;
+        }
+
+        .subjective-card label { display: block; margin-bottom: 10px; font-weight: bold; color: #34495e; }
+
+        .time-input-group { display: flex; align-items: center; gap: 8px; }
+        .inline-input { width: 70px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; text-align: center; }
+        .standard-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1em; transition: 0.2s; }
+
+        .btn-calc { background-color: #28a745; color: white; width: 100%; font-size: 1.2em; margin-bottom: 10px; }
+        .btn-nav { background-color: #007bff; color: white; flex: 1; }
+        .btn-reset { background-color: #6c757d; color: white; flex: 1; }
+        .btn-exit { background-color: #dc3545; color: white; flex: 1; }
+        button:hover { opacity: 0.85; transform: translateY(-1px); }
+
+        .score-display { background: #ffffff; border: 3px solid #007bff; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center; }
+        .score-label { font-size: 1.1em; color: #495057; margin-bottom: 5px; }
+        #current-patient-id { font-size: 1.3em; font-weight: bold; color: #212529; display: block; margin-bottom: 10px; }
+        #score-subscores { font-size: 1.05em; line-height: 2; color: #495057; }
+        #score-total { font-size: 3em; font-weight: 800; color: #007bff; margin: 5px 0; }
+        .score-unit { font-size: 1.1em; color: #868e96; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="survey-section">
+        <h2>소아 수면 습관 설문지 (K-CSHQ)</h2>
+        <div id="questions-area"></div>
+    </div>
+
+    <div class="control-section" id="control-section">
+        <div class="score-display">
+            <div class="score-label">환자 번호</div>
+            <span id="current-patient-id">-</span>
+            <div class="score-label">소영역 점수</div>
+            <div id="score-subscores">A: - &nbsp; D: -<br>B: - &nbsp; E: -<br>C: -</div>
+            <div class="score-label" style="margin-top:10px;">계산된 총점</div>
+            <div id="score-total">0</div>
+            <div class="score-unit">점</div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-reset" onclick="resetCurrent()">초기화</button>
+            <button class="btn-exit" onclick="snGoHome()">홈으로</button>
+        </div>
+
+        <button class="btn-calc" onclick="calculate()" style="margin-top:10px;">점수 계산</button>
+    </div>
+</div>
+
+<script>
+    const reverseScoring = [1, 2, 3, 15, 16, 35];
+    let patients = [];
+    let currentIdx = 0;
+
+    const schema = [
+        {
+            id: 'A', title: 'A. 잠을 잘 때',
+            content: [
+                {type: 'sub', id: 'bedtime', label: '당신의 자녀가 잠자리에 드는 시각을 써 주십시오.', format: 'original'},
+                {n: 1, q: "*매일 밤 같은 시각에 잠을 잔다"},
+                {n: 2, q: "*잠을 자기 시작한지 20분 안에 잠이 든다"},
+                {n: 3, q: "*혼자서도 잘 잔다"},
+                {n: 4, q: "부모 혹은 형제(자매)와 같이 잔다"},
+                {n: 5, q: "몸을 흔들거나 반복적으로 움직이면서 잠이 든다"},
+                {n: 6, q: "잠이 들 때 인형이나 담요 같은 물건을 필요로 한다"},
+                {n: 7, q: "잠을 잘 때 부모가 옆에 있어야 한다"},
+                {n: 8, q: "쉽게 잠자리에 든다"},
+                {n: 9, q: "잠자는 것을 싫어한다"},
+                {n: 10, q: "자려고 할 때 투정을 부리거나 누워있지 않으려 한다"},
+                {n: 11, q: "어두운 곳에서 자는 것을 두려워한다"},
+                {n: 12, q: "혼자 자는 것을 두려워한다"}
+            ]
+        },
+        {
+            id: 'B', title: 'B. 수면 중 행동',
+            content: [
+                {type: 'sub', id: 'duration_h', id2: 'duration_m', label: '당신의 자녀가 낮잠을 포함해서 보통 몇 시간 잡니까?', format: 'duration_label'},
+                {n: 13, q: "잠을 너무 조금 잔다"},
+                {n: 14, q: "잠을 너무 많이 잔다"},
+                {n: 15, q: "*잠자는 시간(양)은 적당하다"},
+                {n: 16, q: "*자는 시간(양)은 매일 비슷하다"},
+                {n: 17, q: "잠자리에서 소변을 지린다"},
+                {n: 18, q: "잠꼬대를 한다"},
+                {n: 19, q: "수면 중에 많이 뒤척인다"},
+                {n: 20, q: "자다가 돌아다닌다"},
+                {n: 21, q: "자다가 식구 중 다른 사람의 방에 간다"},
+                {n: 22, q: "자는 도중 몸에 통증을 호소한다"},
+                {type: 'sub', id: 'pain_loc', label: '몸의 통증을 호소한다면 어느 부위입니까?', format: 'text'},
+                {n: 23, q: "자다가 이를 간다"},
+                {n: 24, q: "코를 크게 곤다"},
+                {n: 25, q: "자다가 호흡을 멈춘다"},
+                {n: 26, q: "자다가 코를 킁킁거리거나 헐떡거린다"},
+                {n: 27, q: "집이 아닌 곳에서 못 잔다 (여행지, 친척집 등)"},
+                {n: 28, q: "자는 중에 불편한 것이 있다고 한다"},
+                {n: 29, q: "자다가 소리 지르고 땀을 흘리면서 깨어나고 잘 달래지지 않는다"},
+                {n: 30, q: "무서운 꿈을 꾸고 놀래면서 깨어난다"}
+            ]
+        },
+        {
+            id: 'C', title: 'C. 수면 중 깨어남',
+            content: [
+                {n: 31, q: "자다가 한 번 깬다"},
+                {n: 32, q: "자다가 두 번 이상 깬다"},
+                {n: 33, q: "깨어난 후에 달래주지 않아도 다시 잠이 든다"},
+                {type: 'sub', id: 'awake_m', label: '34. 한 번 깨면 보통 몇 분 정도 깨어 있게 됩니까?', format: 'text'}
+            ]
+        },
+        {
+            id: 'D', title: 'D. 아침에 일어나기',
+            content: [
+                {type: 'sub', id: 'wakeup', label: '당신의 자녀는 보통 아침 몇 시에 일어납니까?', format: 'original'},
+                {n: 35, q: "*아침에 스스로 일어난다"},
+                {n: 36, q: "자명종 소리를 들어야만 일어난다"},
+                {n: 37, q: "일어날 때 기분이 좋지 않아 보인다"},
+                {n: 38, q: "어른이나 형제(자매)가 깨운다"},
+                {n: 39, q: "아침에 잠자리에서 나오기 힘들어한다"},
+                {n: 40, q: "아침에 잠이 완전히 깨는데 시간이 오래 걸린다"},
+                {n: 41, q: "아침에 너무 일찍 깬다"},
+                {n: 42, q: "아침에 식욕이 좋다"}
+            ]
+        },
+        {
+            id: 'E', title: 'E. 낮 시간 동안 졸리움',
+            content: [
+                {n: 43, q: "낮에 꾸벅 꾸벅 존다"},
+                {n: 44, q: "활동을 하다가 갑자기 잠든다"},
+                {n: 45, q: "아침에 피곤해 보인다"},
+                {n: '46. 1.', q: "혼자 놀 때"},
+                {n: '46. 2.', q: "TV를 볼 때"},
+                {n: '46. 3.', q: "차를 타고 갈 때"},
+                {n: '46. 4.', q: "식사를 할 때"}
+            ]
+        }
+    ];
+
+    function init() {
+        const area = document.getElementById('questions-area');
+        schema.forEach(sec => {
+            const secDiv = document.createElement('div');
+            secDiv.innerHTML = `<h3 class="section-title">${sec.title}</h3>`;
+            sec.content.forEach(item => {
+                if(item.type === 'sub') {
+                    const card = document.createElement('div');
+                    card.className = 'subjective-card';
+                    let inputHtml = '';
+                    if(item.format === 'original') {
+                        inputHtml = `<input type="text" id="sub-${item.id}" class="standard-input" placeholder="여기에 입력하세요">`;
+                    } else if(item.format === 'duration_label') {
+                        inputHtml = `
+                            <div class="time-input-group">
+                                <input type="text" id="sub-${item.id}" class="inline-input"> 시간
+                                <input type="text" id="sub-${item.id2}" class="inline-input"> 분
+                            </div>`;
+                    } else {
+                        inputHtml = `<input type="text" id="sub-${item.id}" class="standard-input" placeholder="여기에 입력하세요">`;
+                    }
+                    card.innerHTML = `<label>${item.label}</label>${inputHtml}`;
+                    secDiv.appendChild(card);
+                } else {
+                    const qCard = document.createElement('div');
+                    qCard.className = 'question-card';
+                    let qLabel = typeof item.n === 'number' ? `${item.n}.` : `${item.n}`;
+                    qCard.innerHTML = `
+                        <span class="question-text">${qLabel} ${item.q}</span>
+                        <div class="options">
+                            <button class="option-btn" data-q="${item.n}" data-val="3" onclick="sel(this)">자주 그런다 (3)</button>
+                            <button class="option-btn" data-q="${item.n}" data-val="2" onclick="sel(this)">때때로 그런다 (2)</button>
+                            <button class="option-btn" data-q="${item.n}" data-val="1" onclick="sel(this)">드물다 (1)</button>
+                        </div>`;
+                    secDiv.appendChild(qCard);
+                }
+            });
+            area.appendChild(secDiv);
+        });
+        load(0);
+    }
+
+    function sel(btn) {
+        const q = btn.getAttribute('data-q');
+        document.querySelectorAll(`.option-btn[data-q="${q}"]`).forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+    }
+
+    function calculate() {
+        const sess = snGetSession();
+        const id   = sess ? sess.patientId : '';
+        if(!id) { alert("세션 정보가 없습니다. 메인 페이지에서 다시 시작해주세요."); return; }
+
+        let res = { A:0, B:0, C:0, D:0, E:0, total:0 };
+        let missing = false;
+
+        schema.forEach(sec => {
+            sec.content.filter(i => !i.type).forEach(q => {
+                const s = document.querySelector(`.option-btn[data-q="${q.n}"].selected`);
+                if(!s) missing = true;
+                else {
+                    let v = parseInt(s.getAttribute('data-val'));
+                    let num = parseInt(String(q.n).replace(/[^0-9]/g, ''));
+                    if(reverseScoring.includes(num)) v = (v === 3 ? 1 : (v === 1 ? 3 : 2));
+                    res[sec.id] += v;
+                }
+            });
+        });
+
+        if(missing) { alert("모든 객관식 문항을 선택해주세요."); return; }
+        res.total = res.A + res.B + res.C + res.D + res.E;
+
+        document.getElementById('current-patient-id').innerText = id;
+        document.getElementById('score-subscores').innerHTML =
+            `A: ${res.A} &nbsp; D: ${res.D}<br>B: ${res.B} &nbsp; E: ${res.E}<br>C: ${res.C}`;
+        document.getElementById('score-total').innerText = res.total;
+
+        save(id, res);
+
+        snSaveResult('K-CSHQ.html', {
+            patientId:  id,
+            birthdate:  sess ? sess.birthdate : '',
+            age:        sess ? sess.age       : '',
+            date:       new Date().toISOString().split('T')[0],
+            scores:     res,
+            subjective: _getSubjective(),
+            answers:    _getAnswers()
+        });
+
+        alert(`환자 ${id}의 데이터가 저장되었습니다. 총점: ${res.total}점`);
+    }
+
+    function _getSubjective() {
+        return {
+            bedtime:  document.getElementById('sub-bedtime').value,
+            duration: `${document.getElementById('sub-duration_h').value}시간 ${document.getElementById('sub-duration_m').value}분`,
+            pain:     document.getElementById('sub-pain_loc').value,
+            awake:    document.getElementById('sub-awake_m').value,
+            wakeup:   document.getElementById('sub-wakeup').value
+        };
+    }
+
+    function _getAnswers() {
+        const ans = {};
+        document.querySelectorAll('.option-btn.selected').forEach(b => {
+            ans[b.getAttribute('data-q')] = b.getAttribute('data-val');
+        });
+        return ans;
+    }
+
+    function save(id, scores) {
+        const data = {
+            id: id,
+            scores: scores,
+            sub: _getSubjective(),
+            ans: _getAnswers()
+        };
+        patients[currentIdx] = data;
+    }
+
+    function load(idx) {
+        clearUI();
+        if(patients[idx]) {
+            const d = patients[idx];
+            document.getElementById('sub-bedtime').value = d.sub.bedtime || '';
+            const dur = (d.sub.duration || '').split('시간 ');
+            document.getElementById('sub-duration_h').value = dur[0] || '';
+            document.getElementById('sub-duration_m').value = (dur[1]||'').replace('분','');
+            document.getElementById('sub-pain_loc').value = d.sub.pain || '';
+            document.getElementById('sub-awake_m').value = d.sub.awake || '';
+            document.getElementById('sub-wakeup').value = d.sub.wakeup || '';
+
+            for(let q in d.ans) {
+                const btn = document.querySelector(`.option-btn[data-q="${q}"][data-val="${d.ans[q]}"]`);
+                if(btn) btn.classList.add('selected');
+            }
+            if(d.scores) {
+                const s = d.scores;
+                document.getElementById('score-subscores').innerHTML =
+                    `A: ${s.A} &nbsp; D: ${s.D}<br>B: ${s.B} &nbsp; E: ${s.E}<br>C: ${s.C}`;
+                document.getElementById('score-total').innerText = s.total;
+            }
+        }
+    }
+
+    function clearUI() {
+        document.getElementById('current-patient-id').innerText = '-';
+        document.getElementById('score-subscores').innerHTML = 'A: - &nbsp; D: -<br>B: - &nbsp; E: -<br>C: -';
+        document.getElementById('score-total').innerText = '0';
+        document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+        document.querySelectorAll('.standard-input, .inline-input').forEach(i => i.value = '');
+    }
+
+    function resetCurrent() {
+        if(confirm("입력 중인 내용을 초기화하시겠습니까?")) {
+            clearUI();
+            patients[currentIdx] = null;
+        }
+    }
+
+    // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+
+    window.onload = function () {
+        init();
+        snInjectNavBar('K-CSHQ.html');
+        snInjectSurveyNavButtons('K-CSHQ.html', 'control-section');
+
+        const results = snGetResults();
+        if (results.KCSHQ) {
+            const saved = results.KCSHQ;
+            // 주관식 복원
+            const sub = saved.subjective || {};
+            if (sub.bedtime  !== undefined) document.getElementById('sub-bedtime').value   = sub.bedtime;
+            if (sub.duration !== undefined) {
+                const dur = sub.duration.split('시간 ');
+                document.getElementById('sub-duration_h').value = dur[0] || '';
+                document.getElementById('sub-duration_m').value = (dur[1] || '').replace('분', '');
+            }
+            if (sub.pain  !== undefined) document.getElementById('sub-pain_loc').value = sub.pain;
+            if (sub.awake !== undefined) document.getElementById('sub-awake_m').value  = sub.awake;
+            if (sub.wakeup !== undefined) document.getElementById('sub-wakeup').value   = sub.wakeup;
+            // 객관식 복원
+            Object.entries(saved.answers || {}).forEach(([qId, val]) => {
+                const btn = document.querySelector(`.option-btn[data-q="${qId}"][data-val="${val}"]`);
+                if (btn) btn.classList.add('selected');
+            });
+            // 점수 복원
+            if (saved.scores) {
+                const s = saved.scores;
+                document.getElementById('current-patient-id').innerText = saved.patientId || '-';
+                document.getElementById('score-subscores').innerHTML =
+                    `A: ${s.A} &nbsp; D: ${s.D}<br>B: ${s.B} &nbsp; E: ${s.E}<br>C: ${s.C}`;
+                document.getElementById('score-total').innerText = s.total;
+            }
+        }
+    };
+</script>
+</body>
+</html>
