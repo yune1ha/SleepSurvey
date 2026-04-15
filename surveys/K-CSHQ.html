@@ -61,6 +61,17 @@
         .option-btn:hover { background: #f8f9fa; }
         .option-btn.selected { background: #3498db; color: white; border-color: #3498db; }
 
+        .note-card {
+            background: #fff8e1;
+            border-left: 5px solid #f0ad4e;
+            padding: 12px 18px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: bold;
+            color: #795548;
+        }
+
         .subjective-card {
             background: #eef2f3;
             padding: 15px;
@@ -198,6 +209,7 @@
                 {n: 43, q: "낮에 꾸벅 꾸벅 존다"},
                 {n: 44, q: "활동을 하다가 갑자기 잠든다"},
                 {n: 45, q: "아침에 피곤해 보인다"},
+                {type: 'note', text: '다음과 같은 행동을 할때 매우 졸려하거나 잠이 들지 않았습니까?'},
                 {n: '46. 1.', q: "혼자 놀 때"},
                 {n: '46. 2.', q: "TV를 볼 때"},
                 {n: '46. 3.', q: "차를 타고 갈 때"},
@@ -212,7 +224,12 @@
             const secDiv = document.createElement('div');
             secDiv.innerHTML = `<h3 class="section-title">${sec.title}</h3>`;
             sec.content.forEach(item => {
-                if(item.type === 'sub') {
+                if(item.type === 'note') {
+                    const noteCard = document.createElement('div');
+                    noteCard.className = 'note-card';
+                    noteCard.textContent = item.text;
+                    secDiv.appendChild(noteCard);
+                } else if(item.type === 'sub') {
                     const card = document.createElement('div');
                     card.className = 'subjective-card';
                     let inputHtml = '';

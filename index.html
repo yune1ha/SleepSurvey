@@ -511,13 +511,16 @@
     // ─── 설문 배정 ───────────────────────────────────────────
     function assignSurveys(age, hasHeadache) {
         if (age >= 6) {
-            const surveys = ['SDQ.html', 'K-CSHQ.html'];
+            // 만 6세 이상: (PED-MIDAS, 두통 시) → PDSS → SDQ → K-CSHQ
+            const surveys = [];
             if (hasHeadache) surveys.push('PED_MIDAS.html');
-            surveys.push('PDSS.html');
+            surveys.push('PDSS.html', 'SDQ.html', 'K-CSHQ.html');
             return surveys;
         } else {
-            const surveys = ['K-CSHQ.html', 'BISQ-R.html'];
+            // 만 6세 미만: (PED-MIDAS, 두통 시) → K-CSHQ → BISQ-R
+            const surveys = [];
             if (hasHeadache) surveys.push('PED_MIDAS.html');
+            surveys.push('K-CSHQ.html', 'BISQ-R.html');
             return surveys;
         }
     }
