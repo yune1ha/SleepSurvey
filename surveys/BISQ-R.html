@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BISQ-R 설문 프로그램</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../js/survey-nav.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
+        .container { display: flex; gap: 25px; max-width: 1300px; margin: auto; }
+        .survey-section { flex: 2.5; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .control-section { flex: 1; background: #f1f3f5; padding: 25px; border-radius: 12px; position: sticky; top: 20px; height: fit-content; border: 1px solid #dee2e6; }
+
+        h2 { border-bottom: 3px solid #007bff; padding-bottom: 12px; margin-top: 0; color: #0056b3; }
+
+        .q-container { margin-bottom: 20px; padding: 20px; border: 1px solid #dee2e6; border-radius: 8px; background: white; transition: 0.2s; }
+        .q-container:hover { border-color: #3498db; }
+        .q-title { font-weight: bold; font-size: 1.05em; margin-bottom: 15px; display: block; line-height: 1.5; }
+        .opt-box { display: flex; flex-wrap: wrap; gap: 8px; }
+        .opt-btn { padding: 9px 16px; border: 1px solid #dee2e6; background: #fff; border-radius: 4px; cursor: pointer; font-size: 0.9em; transition: 0.2s; }
+        .opt-btn:hover { background: #e9ecef; }
+        .opt-btn.selected { background: #3498db; color: white; border-color: #3498db; font-weight: bold; }
+        .sub-input { width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 4px; font-size: 1em; box-sizing: border-box; }
+        .required { color: #e74c3c; margin-left: 4px; }
+
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1em; transition: 0.2s; }
+
+        .btn-calc { background-color: #28a745; color: white; width: 100%; font-size: 1.2em; margin-bottom: 10px; }
+        .btn-calc:disabled { background-color: #adb5bd; cursor: not-allowed; transform: none; opacity: 1; }
+        .btn-nav { background-color: #007bff; color: white; flex: 1; }
+        .btn-reset { background-color: #6c757d; color: white; flex: 1; }
+        .btn-exit { background-color: #dc3545; color: white; flex: 1; }
+        button:not(:disabled):hover { opacity: 0.85; transform: translateY(-1px); }
+
+        .score-display { background: #ffffff; border: 3px solid #007bff; border-radius: 10px; padding: 25px; margin: 20px 0; text-align: center; }
+        .score-label { font-size: 1.1em; color: #495057; margin-bottom: 5px; }
+        #current-patient-id { font-size: 1.3em; font-weight: bold; color: #212529; display: block; margin-bottom: 10px; }
+        #comp-status { font-size: 1em; color: #495057; }
+        .score-unit { font-size: 1.1em; color: #868e96; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="survey-section">
+        <h2>BISQ-R 설문 문항</h2>
+        <div id="q-list"></div>
+    </div>
+
+    <div class="control-section" id="control-section">
+        <div class="score-display">
+            <div class="score-label">환자 번호</div>
+            <span id="current-patient-id">-</span>
+            <div class="score-label" style="margin-top:10px;">필수 문항 완료</div>
+            <div id="comp-status">0 / 24</div>
+            <div class="score-unit">문항</div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-reset" onclick="handleReset()">초기화</button>
+            <button class="btn-exit" onclick="snGoHome()">홈으로</button>
+        </div>
+
+        <button class="btn-calc" id="btn-save" onclick="saveData()" disabled style="margin-top:10px;">결과 저장</button>
+    </div>
+</div>
+
+<script>
+    const questions = [
+        { id: 'BISQR0', type: 'obj', text: '0. 일주일에 며칠이나 자녀를 재우거나 밤 동안 자녀를 돌보는 데 관여하십니까?', options: ['0일','1일','2일','3일','4일','5일','6일','7일'] },
+        { id: 'BISQR1', type: 'sub', text: '1. 귀하의 자녀의 수면의식(취침시간 루틴)은 보통 몇 시에 시작합니까? (아이가 자러 갈 준비를 하는 시각)' },
+        { id: 'BISQR2', type: 'obj', text: '2. 귀하의 자녀가 잠들기 한 시간 전 주로 무슨 일을 합니까?', options: ['1. 목욕','2. 양치','3. 마사지','4. 놀기','5. 책 읽기','6. 안아 주기','7. 흔들어 주기','8. 주기도문','9. TV 보기','10. 노래 부르기','11. 식사/간식','12. 음악','13. 수유','14. 전자기기','15. 돌아다니기','16. 기타'] },
+        { id: 'BISQR3', type: 'obj', text: '3. 일반적으로 한 주 동안, 귀하의 자녀는 같은 수면의식을 며칠이나 가집니까?', options: ['0일','1일','2일','3일','4일','5일','6일','7일'] },
+        { id: 'BISQR4', type: 'obj', text: '4. 수면의식의 일부로서 보통 귀하의 자녀에게 모유를 먹이거나, 젖병으로 수유합니까?', options: ['1. 예', '2. 아니오'] },
+        { id: 'BISQR5', type: 'obj', text: '5. 귀하의 자녀는 주로 어느 방에서 잠이 듭니까?', options: ['1. 아이 방', '2. 부모 방', '3. 형제 방', '4. 기타'] },
+        { id: 'BISQR6', type: 'obj', text: '6. 귀하의 자녀는 보통 어디에서 잠이 듭니까?', options: ['1. 아기침대','2. 아이침대','3. 부모침대','4. 부모와 동침','5. 유아시트','6. 유모차','7. 안겨서','8. 기타'] },
+        { id: 'BISQR7', type: 'obj', text: '7. 귀하의 자녀는 보통 어떻게 잠에 듭니까?', options: ['1. 안겨서', '2. 어른이 있음', '3. 스스로'] },
+        { id: 'BISQR8', type: 'obj', text: '8. 귀하의 자녀는 보통 모유를 먹이거나, 젖병으로 수유하거나, 컵으로 뭔가를 마시는 동안 잠이 듭니까?', options: ['1. 예', '2. 아니오'] },
+        { id: 'BISQR9', type: 'obj', text: '9. 귀하의 자녀가 주로 노리개 젖꼭지(쪽쪽이)를 물고 잠이 듭니까?', options: ['1. 예', '2. 아니오'] },
+        { id: 'BISQR10', type: 'obj', text: '10. 귀하의 자녀가 잠들 때 방 안에 TV, 스마트폰, 태블릿 등의 전자기기가 있습니까?', options: ['1. 예', '2. 아니오'] },
+        { id: 'BISQR11', type: 'obj', text: '11. 누가 귀하의 자녀를 침대에 둡니까?', options: ['1. 항상 모','2. 주로 모','3. 비슷','4. 주로 부','5. 항상 부','6. 기타'] },
+        { id: 'BISQR12', type: 'sub', text: '12. 주로 몇 시에 아이를 재웁니까? (완전히 불을 끄고 재우는 시각)' },
+        { id: 'BISQR13', type: 'obj', text: '13. 일반적으로 한 주 동안, 귀하의 자녀가 같은 시간에 잠드는 것은 며칠이나 됩니까? (15분 이내)', options: ['0일','1일','2일','3일','4일','5일','6일','7일'] },
+        { id: 'BISQR14', type: 'obj', text: '14. 보통 아이를 재울 때 얼마나 힘이 듭니까?', options: ['1. 매우 쉬움','2. 약간 쉬움','3. 중간','4. 약간 어려움','5. 매우 어려움'] },
+        { id: 'BISQR15', type: 'sub', text: '15. 귀하의 자녀가 잠들기까지 보통 얼마나 걸립니까?' },
+        { id: 'BISQR16', type: 'obj', text: '16. 귀하의 자녀는 어느 방에서 대부분의 잠을 잡니까?', options: ['1. 아이 방', '2. 부모 방', '3. 형제 방', '4. 기타'] },
+        { id: 'BISQR17', type: 'obj', text: '17. 귀하의 자녀는 대부분의 밤 동안 어디에서 잡니까?', options: ['1. 아기침대','2. 아이침대','3. 부모침대','4. 부모와 동침','5. 유아시트','6. 유모차','7. 안겨서','8. 기타'] },
+        { id: 'BISQR18', type: 'obj', text: '18. 귀하의 자녀는 대부분의 시간 동안 어느 자세로 잠을 잡니까?', options: ['1. 엎드려서', '2. 옆으로', '3. 반듯이'] },
+        { id: 'BISQR19', type: 'obj', text: '19. 귀하의 자녀는 보통 하룻밤에 몇 번이나 깹니까?', options: ['0회', '1회', '2회', '3회', '4회', '5회 이상'] },
+        { id: 'BISQR20', type: 'obj', text: '20. 귀하의 자녀가 밤에 자다가 깨면 귀하께서는 주로 무엇을 하십니까?', options: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'] },
+        { id: 'BISQR21', type: 'obj', text: '21. 밤중에 귀하의 자녀가 깨면 주로 누가 반응합니까?', options: ['1. 항상 모','2. 주로 모','3. 비슷','4. 주로 부','5. 항상 부','6. 기타'] },
+        { id: 'BISQR22', type: 'sub', text: '22. 귀하의 자녀가 밤 동안 자다가 깨어 있는 총 시간은 어떻게 됩니까? (밤에 자러 갔을 때부터 아침에 일어날 때까지)' },
+        { id: 'BISQR23', type: 'sub', text: '23. 귀하의 자녀가 깨지 않고 잠들어 있는 가장 긴 시간은 몇 분입니까?' },
+        { id: 'BISQR24', type: 'obj', text: '24. 귀하의 자녀가 잘 때 코를 곱니까?', options: ['1. 절대안함','2. 가끔','3. 주3회 미만','4. 주3회 이상'] },
+        { id: 'BISQR25', type: 'sub', text: '25. 귀하의 자녀가 아침에 일어나는 시간은 몇 시입니까?' },
+        { id: 'BISQR26', type: 'sub', text: '26. 아이가 밤 동안 자는 총 시간은 어떻게 됩니까? (밤에 자러 갔을 때부터 아침에 일어날 때까지)' },
+        { id: 'BISQR27', type: 'obj', text: '27. 귀하의 자녀는 아침에 주로 어디에서 일어납니까?', options: ['1. 아기침대','2. 아이침대','3. 부모침대','4. 부모와 동침'] },
+        { id: 'BISQR28', type: 'obj', text: '28. 귀하의 자녀는 보통 밤에 얼마나 잘 잡니까?', options: ['1. 매우잘잔다','2. 잘잔다','3. 잘자는 편','4. 못잔다','5. 매우못잔다'] },
+        { id: 'BISQR29', type: 'obj', text: '29. 아이가 아침에 일어났을 때, 아이의 기분이 어때 보이십니까?', options: ['1. 매우행복','2. 약간행복','3. 중간','4. 약간짜증','5. 매우짜증'] },
+        { id: 'BISQR30', type: 'sub', text: '30. 일반적으로 귀하의 자녀는 하루에 낮잠을 몇 번이나 잡니까? (아침에 깨어나서 밤에 자러 가기 전까지)' },
+        { id: 'BISQR31', type: 'sub', text: '31. 자녀가 아침에 깨어나서 밤에 자러 가기 전까지 낮잠을 자는 총 시간은 어떻게 됩니까?' },
+        { id: 'BISQR32', type: 'obj', text: '32. 귀하는 자녀의 수면이 문제라고 생각하십니까?', options: ['1. 전혀아님','2. 아주작은문제','3. 작은문제','4. 문제','5. 심각한문제'] },
+        { id: 'BISQR33', type: 'obj', text: '33. 귀하는 자녀의 수면에 대해 어느 정도 자신감이 있습니까?', options: ['1. 매우자신','2. 어느정도','3. 중간','4. 확신없음','5. 매우확신없음'] }
+    ];
+
+    let tempAnswers = {};
+
+    function init() {
+        const list = document.getElementById('q-list');
+        questions.forEach(q => {
+            const container = document.createElement('div');
+            container.className = 'q-container';
+            const star = q.type === 'obj' ? '<span class="required">*</span>' : '';
+            container.innerHTML = `<span class="q-title">${q.text}${star}</span>`;
+
+            if (q.type === 'obj') {
+                const box = document.createElement('div');
+                box.className = 'opt-box';
+                q.options.forEach((opt, idx) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'opt-btn';
+                    btn.innerText = opt;
+                    btn.onclick = () => {
+                        box.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        tempAnswers[q.id] = idx + 1;
+                        checkCompletion();
+                    };
+                    btn.id = `btn-${q.id}-${idx + 1}`;
+                    box.appendChild(btn);
+                });
+                container.appendChild(box);
+            } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'sub-input';
+                input.id = `input-${q.id}`;
+                input.oninput = (e) => { tempAnswers[q.id] = e.target.value; };
+                container.appendChild(input);
+            }
+            list.appendChild(container);
+        });
+
+        // 세션에서 이전 저장 데이터 복원
+        const results = snGetResults();
+        if (results && results['BISQR']) {
+            tempAnswers = { ...(results['BISQR'].answers || {}) };
+            refreshFormUI();
+        }
+    }
+
+    function checkCompletion() {
+        const objQs = questions.filter(q => q.type === 'obj');
+        const doneCount = objQs.filter(q => tempAnswers[q.id]).length;
+        document.getElementById('comp-status').innerText = `${doneCount} / ${objQs.length}`;
+        document.getElementById('btn-save').disabled = (doneCount < objQs.length);
+    }
+
+    function saveData() {
+        const sess = snGetSession();
+        const id   = sess ? sess.patientId : '';
+        if (!id) { alert("세션 정보가 없습니다. 메인 페이지에서 다시 시작해주세요."); return; }
+
+        snSaveResult('BISQ-R.html', {
+            patientId: id,
+            birthdate: sess ? sess.birthdate : '',
+            age:       sess ? sess.age       : '',
+            date:      new Date().toISOString().split('T')[0],
+            answers:   { ...tempAnswers }
+        });
+
+        document.getElementById('current-patient-id').innerText = id;
+        alert(`환자 ${id}의 데이터가 저장되었습니다.`);
+    }
+
+    function handleReset() {
+        if (confirm("입력 중인 내용을 초기화하시겠습니까?")) {
+            tempAnswers = {};
+            refreshFormUI();
+            document.getElementById('current-patient-id').innerText = '-';
+        }
+    }
+
+    function refreshFormUI() {
+        questions.forEach(q => {
+            if (q.type === 'obj') {
+                const btns = document.querySelectorAll(`[id^="btn-${q.id}-"]`);
+                btns.forEach(b => b.classList.remove('selected'));
+                if (tempAnswers[q.id]) {
+                    const activeBtn = document.getElementById(`btn-${q.id}-${tempAnswers[q.id]}`);
+                    if (activeBtn) activeBtn.classList.add('selected');
+                }
+            } else {
+                const inp = document.getElementById(`input-${q.id}`);
+                if (inp) inp.value = tempAnswers[q.id] || '';
+            }
+        });
+        checkCompletion();
+    }
+
+    // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+
+    window.onload = function () {
+        init();
+        snInjectNavBar('BISQ-R.html');
+        snInjectSurveyNavButtons('BISQ-R.html', 'control-section');
+
+        // 세션에서 환자 번호 표시
+        const sess = snGetSession();
+        if (sess && sess.patientId) {
+            document.getElementById('current-patient-id').innerText = sess.patientId;
+        }
+    };
+</script>
+</body>
+</html>

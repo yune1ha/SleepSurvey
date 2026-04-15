@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDQ 웹 프로그램 - 문항 수정본</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../js/survey-nav.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
+        .container { display: flex; gap: 25px; max-width: 1300px; margin: auto; }
+        .survey-section { flex: 2.5; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .control-section { flex: 1; background: #f1f3f5; padding: 25px; border-radius: 12px; position: sticky; top: 20px; height: fit-content; border: 1px solid #dee2e6; }
+        
+        h2 { border-bottom: 3px solid #007bff; padding-bottom: 12px; margin-top: 0; color: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #dee2e6; padding: 15px; text-align: center; }
+        th { background-color: #e9ecef; font-weight: bold; }
+        .question-text { text-align: left; width: 50%; font-size: 1.05em; line-height: 1.4; }
+        
+        input[type="radio"] { 
+            width: 30px; 
+            height: 30px; 
+            cursor: pointer; 
+            accent-color: #007bff;
+        }
+
+        .input-group { margin-bottom: 25px; }
+        .input-group label { display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1em; }
+        input[type="text"] { width: 100%; padding: 12px; border: 2px solid #ced4da; border-radius: 6px; font-size: 1.1em; }
+        
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1em; transition: 0.2s; }
+        
+        .btn-calc { background-color: #28a745; color: white; width: 100%; font-size: 1.2em; margin-bottom: 10px; }
+        .btn-nav { background-color: #007bff; color: white; flex: 1; }
+        .btn-save { background-color: #17a2b8; color: white; width: 100%; margin-top: 10px; }
+        .btn-reset { background-color: #6c757d; color: white; flex: 1; }
+        .btn-exit { background-color: #dc3545; color: white; flex: 1; }
+        button:hover { opacity: 0.85; transform: translateY(-1px); }
+
+        .score-display { background: #ffffff; border: 3px solid #007bff; border-radius: 10px; padding: 25px; margin: 20px 0; text-align: center; }
+        .score-label { font-size: 1.1em; color: #495057; margin-bottom: 5px; }
+        #current-patient-id { font-size: 1.3em; font-weight: bold; color: #212529; display: block; margin-bottom: 10px; }
+        #current-score { font-size: 3.5em; font-weight: 800; color: #007bff; margin: 5px 0; }
+        .score-unit { font-size: 1.1em; color: #868e96; }
+        
+        .asterisk { color: #e03131; font-weight: bold; margin-right: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="survey-section">
+        <h2>한국어판 강점·난점 설문지 (SDQ)</h2>
+        <p style="color: #666;">※ 지난 6개월 동안의 행동에 근거하여 가장 적절한 답변을 선택해 주세요.</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>No.</th>
+                    <th>문항</th>
+                    <th>전혀 아니다 (0)</th>
+                    <th>다소 그렇다 (1)</th>
+                    <th>분명히 그렇다 (2)</th>
+                </tr>
+            </thead>
+            <tbody id="question-table"></tbody>
+        </table>
+    </div>
+
+    <div class="control-section" id="control-section">
+        <div class="score-display">
+            <div class="score-label">환자 번호</div>
+            <span id="current-patient-id">-</span>
+            <div class="score-label">계산된 총점</div>
+            <div id="current-score">0</div>
+            <div class="score-unit">점</div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-reset" onclick="resetCurrentForm()">초기화</button>
+            <button class="btn-exit" onclick="snGoHome()">홈으로</button>
+        </div>
+
+        <button class="btn-calc" onclick="processEntry()" style="margin-top:10px;">점수 계산</button>
+    </div>
+</div>
+
+<script>
+    const questions = [
+        { id: 1, text: "다른 사람의 감정을 배려한다.", reverse: false },
+        { id: 2, text: "차분하지 않고 부산하며 오랫동안 가만히 있지 못한다.", reverse: false },
+        { id: 3, text: "자주 두통이나 복통을 호소하거나 몸이 아프다고 한다.", reverse: false },
+        { id: 4, text: "간식, 장난감, 또는 연필 등을 기꺼이 다른 아이들과 함께 나눈다.", reverse: false },
+        { id: 5, text: "자주 분노발작을 보이거나, 불같이 성질을 부린다.", reverse: false },
+        { id: 6, text: "주로 홀로 있고, 혼자서 노는 편이다.", reverse: false },
+        { id: 7, text: "일반적으로 순종적이고, 평소에 어른이 시키는 대로 한다.", reverse: true },
+        { id: 8, text: "걱정이 많고, 종종 근심스러워 보인다.", reverse: false },
+        { id: 9, text: "누군가가 다치거나, 몸 상태가 나쁘거나, 아파 보이면 도움을 준다.", reverse: false },
+        { id: 10, text: "언제나 안절부절못하고 꼼지락거린다.", reverse: false },
+        { id: 11, text: "적어도 한 명 이상의 절친한 친구가 있다.", reverse: true },
+        { id: 12, text: "다른 아이들에게 종종 싸움을 걸거나, 괴롭힌다(때리기, 위협하기, 빼앗기).", reverse: false },
+        { id: 13, text: "자주 불행해 보이고, 낙담하며, 눈물이 고인다.", reverse: false },
+        { id: 14, text: "대체로 다른 아이들이 내 자녀(학생)를 좋아한다.", reverse: true },
+        { id: 15, text: "쉽게 주의가 분산되고 집중력이 산만하다.", reverse: false },
+        { id: 16, text: "낯선 상황에서는 불안해지거나 안 떨어지려 하고, 쉽사리 자신감을 잃는다.", reverse: false },
+        { id: 17, text: "자신보다 어린 아동들에게 친절하다.", reverse: false },
+        { id: 18, text: "종종 거짓말을 하거나 속인다.", reverse: false },
+        { id: 19, text: "다른 아이들에게 놀림을 받거나 괴롭힘을 당한다.", reverse: false },
+        { id: 20, text: "자주 부모나 선생님, 또는 다른 아이들을 자진해서 돕는다.", reverse: false },
+        { id: 21, text: "곰곰이 생각한 다음에 행동한다.", reverse: true },
+        { id: 22, text: "가정이나 학교 또는 어떤 곳에서 훔친다.", reverse: false },
+        { id: 23, text: "또래 아이들보다 어른들과 더 잘 지낸다.", reverse: false },
+        { id: 24, text: "두려움이 많고 무서움을 잘 탄다.", reverse: false },
+        { id: 25, text: "주어진 일을 끝까지 마치고, 주의력을 잘 유지한다.", reverse: true }
+    ];
+
+    let db = [];
+    let curIdx = -1;
+
+    window.addEventListener('load', function () {
+        snInjectNavBar('SDQ.html');
+        snInjectSurveyNavButtons('SDQ.html', 'control-section');
+
+        const results = snGetResults();
+        if (results.SDQ) {
+            const saved = results.SDQ;
+            document.getElementById('current-patient-id').innerText = saved.patientId || '-';
+            document.getElementById('current-score').innerText = saved.score ?? 0;
+            Object.entries(saved.answers || {}).forEach(([qId, val]) => {
+                const radio = document.querySelector(`input[name="q${qId}"][value="${val}"]`);
+                if (radio) radio.checked = true;
+            });
+        }
+    });
+
+    const tbody = document.getElementById('question-table');
+    questions.forEach(q => {
+        const row = document.createElement('tr');
+        const numLabel = q.reverse ? `<span class="asterisk">*</span>${q.id}` : q.id;
+        row.innerHTML = `
+            <td>${numLabel}</td>
+            <td class="question-text">${q.text}</td>
+            <td><input type="radio" name="q${q.id}" value="0"></td>
+            <td><input type="radio" name="q${q.id}" value="1"></td>
+            <td><input type="radio" name="q${q.id}" value="2"></td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    function processEntry() {
+        const sess = snGetSession();
+        const id   = sess ? sess.patientId : '';
+        if (!id) { alert("세션 정보가 없습니다. 메인 페이지에서 다시 시작해주세요."); return; }
+
+        let score = 0;
+        let logs = {};
+        let missing = false;
+
+        questions.forEach(q => {
+            const sel = document.querySelector(`input[name="q${q.id}"]:checked`);
+            if (!sel) { missing = true; return; }
+
+            let val = parseInt(sel.value);
+            if (q.reverse) {
+                if (val === 0) val = 2;
+                else if (val === 1) val = 1;
+                else if (val === 2) val = 0;
+            }
+            score += val;
+            logs[q.id] = sel.value;
+        });
+
+        if (missing) { alert("모든 문항에 답변을 클릭해주세요."); return; }
+
+        const found = db.findIndex(p => p.id === id);
+        if (found > -1) {
+            db[found] = { id, score, logs };
+            curIdx = found;
+        } else {
+            db.push({ id, score, logs });
+            curIdx = db.length - 1;
+        }
+
+        document.getElementById('current-patient-id').innerText = id;
+        document.getElementById('current-score').innerText = score;
+
+        snSaveResult('SDQ.html', {
+            patientId: id,
+            birthdate: sess ? sess.birthdate : '',
+            age:       sess ? sess.age       : '',
+            date:      new Date().toISOString().split('T')[0],
+            score:     score,
+            answers:   logs
+        });
+
+        alert(`환자 ${id}의 데이터가 저장되었습니다. 총점: ${score}점`);
+    }
+
+    // changePatient() 제거 — 설문 간 이동은 snGoToPrev/snGoToNext 로 대체
+
+    function clearUI() {
+        document.getElementById('current-patient-id').innerText = "-";
+        document.getElementById('current-score').innerText = "0";
+        document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
+    }
+
+    function resetCurrentForm() {
+        if (confirm("입력 중인 내용을 초기화하시겠습니까?")) {
+            clearUI();
+        }
+    }
+
+    // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+
+</script>
+
+</body>
+</html>
