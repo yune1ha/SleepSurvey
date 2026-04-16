@@ -23,6 +23,8 @@
         .opt-btn.selected { background: #3498db; color: white; border-color: #3498db; font-weight: bold; }
         .sub-input { width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 4px; font-size: 1em; box-sizing: border-box; }
         .required { color: #e74c3c; margin-left: 4px; }
+        .na-btn { background: #fff0f0 !important; border-color: #ffc0c0 !important; color: #c0392b !important; }
+        .na-btn.selected { background: #e74c3c !important; color: white !important; border-color: #e74c3c !important; }
 
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
         button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1em; transition: 0.2s; }
@@ -58,12 +60,15 @@
             <div class="score-unit">문항</div>
         </div>
 
+        <button class="btn-calc" id="btn-save" onclick="calcAndSave()">저장</button>
+
         <div class="btn-group">
             <button class="btn-reset" onclick="handleReset()">초기화</button>
             <button class="btn-exit" onclick="snGoHome()">홈으로</button>
         </div>
 
-        <button class="btn-calc" id="btn-save" onclick="saveData()" disabled style="margin-top:10px;">결과 저장</button>
+        <!-- WP5-2: BISQ-R 별도 엑셀 저장 -->
+        <button class="btn-calc" onclick="snExportBISQRResults()" style="margin-top:10px;background:#17a2b8;">BISQ-R 별도 저장 (Excel)</button>
     </div>
 </div>
 
@@ -131,6 +136,17 @@
                     btn.id = `btn-${q.id}-${idx + 1}`;
                     box.appendChild(btn);
                 });
+                const naBtn = document.createElement('button');
+                naBtn.className = 'opt-btn na-btn';
+                naBtn.innerText = '답변없음';
+                naBtn.id = `btn-${q.id}-N/A`;
+                naBtn.onclick = () => {
+                    box.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+                    naBtn.classList.add('selected');
+                    tempAnswers[q.id] = 'N/A';
+                    checkCompletion();
+                };
+                box.appendChild(naBtn);
                 container.appendChild(box);
             } else {
                 const input = document.createElement('input');
@@ -155,7 +171,6 @@
         const objQs = questions.filter(q => q.type === 'obj');
         const doneCount = objQs.filter(q => tempAnswers[q.id]).length;
         document.getElementById('comp-status').innerText = `${doneCount} / ${objQs.length}`;
-        document.getElementById('btn-save').disabled = (doneCount < objQs.length);
     }
 
     function saveData() {
@@ -201,6 +216,28 @@
     }
 
     // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+
+    // ── 저장 버튼 클릭 ──────────────────────────────────────────────────────────
+    function calcAndSave() {
+        var msg = window.snAutoSave();
+        _snShowToast(msg || '저장되었습니다', 2500);
+    }
+
+    // WP4: 자동 저장 (다음 버튼 클릭 시 호출)
+    window.snAutoSave = function() {
+        const sess = snGetSession();
+        const id   = sess ? sess.patientId : '';
+        if (!id) return null;
+        snSaveResult('BISQ-R.html', {
+            patientId: id,
+            birthdate: sess ? sess.birthdate : '',
+            age:       sess ? sess.age       : '',
+            date:      new Date().toISOString().split('T')[0],
+            answers:   { ...tempAnswers }
+        });
+        document.getElementById('current-patient-id').innerText = id;
+        return 'BISQ-R 저장됨';
+    };
 
     window.onload = function () {
         init();

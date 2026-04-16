@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>K-CSHQ 소아 수면 습관 설문 프로그램</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="../js/survey-nav.js"></script>
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
@@ -44,10 +44,12 @@
         .options {
             display: flex;
             gap: 12px;
+            flex-wrap: wrap;
         }
 
         .option-btn {
             flex: 1;
+            min-width: 90px;
             padding: 14px 8px;
             border: 2px solid #dee2e6;
             background: #fff;
@@ -60,17 +62,8 @@
 
         .option-btn:hover { background: #f8f9fa; }
         .option-btn.selected { background: #3498db; color: white; border-color: #3498db; }
-
-        .note-card {
-            background: #fff8e1;
-            border-left: 5px solid #f0ad4e;
-            padding: 12px 18px;
-            margin-bottom: 10px;
-            border-radius: 6px;
-            font-size: 1em;
-            font-weight: bold;
-            color: #795548;
-        }
+        .option-btn.na-btn { background: #fff0f0; border-color: #ffc0c0; color: #c0392b; flex: 0 0 auto; min-width: 80px; }
+        .option-btn.na-btn.selected { background: #e74c3c; color: white; border-color: #e74c3c; }
 
         .subjective-card {
             background: #eef2f3;
@@ -122,12 +115,12 @@
             <div class="score-unit">점</div>
         </div>
 
+        <button class="btn-calc" onclick="calcAndSave()">점수 계산 및 저장</button>
+
         <div class="btn-group">
             <button class="btn-reset" onclick="resetCurrent()">초기화</button>
             <button class="btn-exit" onclick="snGoHome()">홈으로</button>
         </div>
-
-        <button class="btn-calc" onclick="calculate()" style="margin-top:10px;">점수 계산</button>
     </div>
 </div>
 
@@ -209,7 +202,8 @@
                 {n: 43, q: "낮에 꾸벅 꾸벅 존다"},
                 {n: 44, q: "활동을 하다가 갑자기 잠든다"},
                 {n: 45, q: "아침에 피곤해 보인다"},
-                {type: 'note', text: '다음과 같은 행동을 할때 매우 졸려하거나 잠이 들지 않았습니까?'},
+                // WP3: 46번 선행 질문 추가
+                {type: 'label', text: '46. 다음과 같은 행동을 할 때 매우 졸려하거나 잠이 들지 않았습니까?'},
                 {n: '46. 1.', q: "혼자 놀 때"},
                 {n: '46. 2.', q: "TV를 볼 때"},
                 {n: '46. 3.', q: "차를 타고 갈 때"},
@@ -224,18 +218,19 @@
             const secDiv = document.createElement('div');
             secDiv.innerHTML = `<h3 class="section-title">${sec.title}</h3>`;
             sec.content.forEach(item => {
-                if(item.type === 'note') {
-                    const noteCard = document.createElement('div');
-                    noteCard.className = 'note-card';
-                    noteCard.textContent = item.text;
-                    secDiv.appendChild(noteCard);
-                } else if(item.type === 'sub') {
+                if (item.type === 'label') {
+                    // WP3: 선행 질문 레이블
+                    const labelDiv = document.createElement('div');
+                    labelDiv.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:12px 16px;margin:10px 0 6px;font-weight:bold;color:#856404;font-size:1.0em;';
+                    labelDiv.textContent = item.text;
+                    secDiv.appendChild(labelDiv);
+                } else if (item.type === 'sub') {
                     const card = document.createElement('div');
                     card.className = 'subjective-card';
                     let inputHtml = '';
-                    if(item.format === 'original') {
+                    if (item.format === 'original') {
                         inputHtml = `<input type="text" id="sub-${item.id}" class="standard-input" placeholder="여기에 입력하세요">`;
-                    } else if(item.format === 'duration_label') {
+                    } else if (item.format === 'duration_label') {
                         inputHtml = `
                             <div class="time-input-group">
                                 <input type="text" id="sub-${item.id}" class="inline-input"> 시간
@@ -256,6 +251,7 @@
                             <button class="option-btn" data-q="${item.n}" data-val="3" onclick="sel(this)">자주 그런다 (3)</button>
                             <button class="option-btn" data-q="${item.n}" data-val="2" onclick="sel(this)">때때로 그런다 (2)</button>
                             <button class="option-btn" data-q="${item.n}" data-val="1" onclick="sel(this)">드물다 (1)</button>
+                            <button class="option-btn na-btn" data-q="${item.n}" data-val="N/A" onclick="sel(this)">답변없음</button>
                         </div>`;
                     secDiv.appendChild(qCard);
                 }
@@ -271,10 +267,16 @@
         btn.classList.add('selected');
     }
 
+    // ── 점수 계산 및 저장 버튼 클릭 ──────────────────────────────────────────
+    function calcAndSave() {
+        var msg = window.snAutoSave();
+        _snShowToast(msg || '저장되었습니다', 2500);
+    }
+
     function calculate() {
         const sess = snGetSession();
         const id   = sess ? sess.patientId : '';
-        if(!id) { alert("세션 정보가 없습니다. 메인 페이지에서 다시 시작해주세요."); return; }
+        if (!id) { alert("세션 정보가 없습니다. 메인 페이지에서 다시 시작해주세요."); return; }
 
         let res = { A:0, B:0, C:0, D:0, E:0, total:0 };
         let missing = false;
@@ -282,17 +284,17 @@
         schema.forEach(sec => {
             sec.content.filter(i => !i.type).forEach(q => {
                 const s = document.querySelector(`.option-btn[data-q="${q.n}"].selected`);
-                if(!s) missing = true;
-                else {
-                    let v = parseInt(s.getAttribute('data-val'));
-                    let num = parseInt(String(q.n).replace(/[^0-9]/g, ''));
-                    if(reverseScoring.includes(num)) v = (v === 3 ? 1 : (v === 1 ? 3 : 2));
-                    res[sec.id] += v;
-                }
+                if (!s) { missing = true; return; }
+                const val = s.getAttribute('data-val');
+                if (val === 'N/A') return;  // 답변없음은 점수 제외
+                let v = parseInt(val);
+                let num = parseInt(String(q.n).replace(/[^0-9]/g, ''));
+                if (reverseScoring.includes(num)) v = (v === 3 ? 1 : (v === 1 ? 3 : 2));
+                res[sec.id] += v;
             });
         });
 
-        if(missing) { alert("모든 객관식 문항을 선택해주세요."); return; }
+        if (missing) { alert("모든 객관식 문항을 선택해주세요. (응답 불가 시 '답변없음' 선택)"); return; }
         res.total = res.A + res.B + res.C + res.D + res.E;
 
         document.getElementById('current-patient-id').innerText = id;
@@ -306,7 +308,6 @@
             patientId:  id,
             birthdate:  sess ? sess.birthdate : '',
             age:        sess ? sess.age       : '',
-            date:       new Date().toISOString().split('T')[0],
             scores:     res,
             subjective: _getSubjective(),
             answers:    _getAnswers()
@@ -334,18 +335,13 @@
     }
 
     function save(id, scores) {
-        const data = {
-            id: id,
-            scores: scores,
-            sub: _getSubjective(),
-            ans: _getAnswers()
-        };
+        const data = { id: id, scores: scores, sub: _getSubjective(), ans: _getAnswers() };
         patients[currentIdx] = data;
     }
 
     function load(idx) {
         clearUI();
-        if(patients[idx]) {
+        if (patients[idx]) {
             const d = patients[idx];
             document.getElementById('sub-bedtime').value = d.sub.bedtime || '';
             const dur = (d.sub.duration || '').split('시간 ');
@@ -355,11 +351,11 @@
             document.getElementById('sub-awake_m').value = d.sub.awake || '';
             document.getElementById('sub-wakeup').value = d.sub.wakeup || '';
 
-            for(let q in d.ans) {
+            for (let q in d.ans) {
                 const btn = document.querySelector(`.option-btn[data-q="${q}"][data-val="${d.ans[q]}"]`);
-                if(btn) btn.classList.add('selected');
+                if (btn) btn.classList.add('selected');
             }
-            if(d.scores) {
+            if (d.scores) {
                 const s = d.scores;
                 document.getElementById('score-subscores').innerHTML =
                     `A: ${s.A} &nbsp; D: ${s.D}<br>B: ${s.B} &nbsp; E: ${s.E}<br>C: ${s.C}`;
@@ -377,13 +373,53 @@
     }
 
     function resetCurrent() {
-        if(confirm("입력 중인 내용을 초기화하시겠습니까?")) {
+        if (confirm("입력 중인 내용을 초기화하시겠습니까?")) {
             clearUI();
             patients[currentIdx] = null;
         }
     }
 
-    // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+    // ── 자동 저장 (다음 버튼 클릭 / 점수계산 버튼 클릭 시 호출) ──────────────
+    window.snAutoSave = function() {
+        const sess = snGetSession();
+        const id   = sess ? sess.patientId : '';
+        if (!id) return null;
+        const res = { A:0, B:0, C:0, D:0, E:0, total:0 };
+        schema.forEach(sec => {
+            sec.content.filter(i => !i.type).forEach(q => {
+                const s = document.querySelector(`.option-btn[data-q="${q.n}"].selected`);
+                if (!s) return;  // 미응답 - 점수 미포함
+                const val = s.getAttribute('data-val');
+                if (val === 'N/A') return;  // 답변없음 - 점수 미포함
+                let v = parseInt(val);
+                const num = parseInt(String(q.n).replace(/[^0-9]/g, ''));
+                if (reverseScoring.includes(num)) v = (v === 3 ? 1 : (v === 1 ? 3 : 2));
+                res[sec.id] += v;
+            });
+        });
+        res.total = res.A + res.B + res.C + res.D + res.E;
+        document.getElementById('current-patient-id').innerText = id;
+        document.getElementById('score-subscores').innerHTML =
+            `A: ${res.A} &nbsp; D: ${res.D}<br>B: ${res.B} &nbsp; E: ${res.E}<br>C: ${res.C}`;
+        document.getElementById('score-total').innerText = res.total;
+        // 답변 저장 시 미응답은 '' 로 포함
+        const allAnswers = {};
+        schema.forEach(sec => {
+            sec.content.filter(i => !i.type).forEach(q => {
+                const s = document.querySelector(`.option-btn[data-q="${q.n}"].selected`);
+                allAnswers[q.n] = s ? s.getAttribute('data-val') : '';
+            });
+        });
+        snSaveResult('K-CSHQ.html', {
+            patientId:  id,
+            birthdate:  sess ? sess.birthdate : '',
+            age:        sess ? sess.age       : '',
+            scores:     res,
+            subjective: _getSubjective(),
+            answers:    allAnswers
+        });
+        return `K-CSHQ 총점: ${res.total}점 저장됨`;
+    };
 
     window.onload = function () {
         init();
@@ -393,7 +429,6 @@
         const results = snGetResults();
         if (results.KCSHQ) {
             const saved = results.KCSHQ;
-            // 주관식 복원
             const sub = saved.subjective || {};
             if (sub.bedtime  !== undefined) document.getElementById('sub-bedtime').value   = sub.bedtime;
             if (sub.duration !== undefined) {
@@ -404,12 +439,10 @@
             if (sub.pain  !== undefined) document.getElementById('sub-pain_loc').value = sub.pain;
             if (sub.awake !== undefined) document.getElementById('sub-awake_m').value  = sub.awake;
             if (sub.wakeup !== undefined) document.getElementById('sub-wakeup').value   = sub.wakeup;
-            // 객관식 복원
             Object.entries(saved.answers || {}).forEach(([qId, val]) => {
                 const btn = document.querySelector(`.option-btn[data-q="${qId}"][data-val="${val}"]`);
                 if (btn) btn.classList.add('selected');
             });
-            // 점수 복원
             if (saved.scores) {
                 const s = saved.scores;
                 document.getElementById('current-patient-id').innerText = saved.patientId || '-';

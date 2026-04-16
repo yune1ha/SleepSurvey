@@ -1,11 +1,12 @@
 /**
- * survey-nav.js v3.0 — 설문 내비게이션 · 결과 저장 · 다중 환자 · 통합 Excel 출력
+ * survey-nav.js v3.1 — 설문 내비게이션 · 결과 저장 · 다중 환자 · 통합 Excel 출력
  * 수면 설문지 시스템
  *
  * 경로 기준: surveys/ (index.html 은 ../index.html)
  *
  * [v2.1] file:// localStorage 격리 → URL 파라미터(sn_s, sn_r) 전달로 우회
  * [v3.0] 다중 환자 누적(sn_a), 점수 계산 버튼 하단 이동, 새 환자 버튼, Excel 전체 환자 출력
+ * [v3.1] 점수계산 버튼 복원, 답변없음 빨간색 표시, 검사일 제거
  */
 
 const SN_SESSION_KEY = 'sleepSurvey_session';
@@ -127,6 +128,15 @@ function snGoToNext(currentFilename) {
     if (next) snGoTo(next);
 }
 
+// -- Toast notification --
+function _snShowToast(msg, duration) {
+    duration = duration || 1800;
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2c3e50;color:#fff;padding:13px 26px;border-radius:8px;font-size:1.05em;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.35);font-family:inherit;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function(){ t.style.transition='opacity 0.3s'; t.style.opacity='0'; setTimeout(function(){ t.remove(); },300); }, duration);
+}
 /**
  * 이전/다음 설문 버튼을 .btn-calc 앞에 삽입.
  * 마지막 설문이면 .btn-calc 뒤에 "새 환자 추가" 버튼도 삽입.
@@ -162,7 +172,15 @@ function snInjectSurveyNavButtons(currentFilename, containerId) {
         nextBtn.textContent = '다음 설문 ▶';
         nextBtn.className   = 'btn-nav';
         nextBtn.style.flex  = '1';
-        nextBtn.onclick     = () => snGoToNext(currentFilename);
+        nextBtn.onclick = () => {
+            if (typeof window.snAutoSave === 'function') {
+                var msg = window.snAutoSave();
+                _snShowToast(msg || '저장되었습니다');
+                setTimeout(function(){ snGoToNext(currentFilename); }, 1600);
+            } else {
+                snGoToNext(currentFilename);
+            }
+        };
         wrapper.appendChild(nextBtn);
     }
 
@@ -239,8 +257,9 @@ function snInjectNavBar(currentFilename) {
     if (s) {
         const info = document.createElement('div');
         info.style.cssText = 'font-size:13px;white-space:nowrap;line-height:1.3;';
+        const nameStr = s.patientName ? ` &nbsp;·&nbsp; ${s.patientName}` : '';
         info.innerHTML =
-            `<strong>${s.patientId}</strong> &nbsp;·&nbsp; 만 <strong>${s.age}세</strong>` +
+            `<strong>${s.patientId}</strong>${nameStr} &nbsp;·&nbsp; 만 <strong>${s.age}세</strong>` +
             `<br><span style="opacity:0.55;font-size:11px">${s.birthdate}</span>`;
         bar.appendChild(info);
         bar.appendChild(_snSep());
@@ -400,7 +419,7 @@ function snShowResultsModal() {
     // 헤더 행
     const thead = document.createElement('thead');
     const hrow  = document.createElement('tr');
-    const cols = ['#', '환자번호', '생년월일', '만나이', '두통'];
+    const cols = ['#', '환자번호', '환자이름', '생년월일', '만나이', '두통'];
     if (hasSurvey.SDQ)      cols.push('SDQ');
     if (hasSurvey.KCSHQ)    cols.push('K-CSHQ A', 'K-CSHQ B', 'K-CSHQ C', 'K-CSHQ D', 'K-CSHQ E', 'K-CSHQ 합');
     if (hasSurvey.PEDMIDAS) cols.push('PED-MIDAS');
@@ -428,6 +447,7 @@ function snShowResultsModal() {
         const cells = [
             i + 1,
             s.patientId,
+            s.patientName || '',
             s.birthdate,
             s.age + '세',
             s.hasHeadache ? '있음' : '없음'
@@ -466,6 +486,47 @@ function snShowResultsModal() {
     document.body.appendChild(overlay);
 }
 
+// ── WP4: 빨간색 셀 스타일 적용 헬퍼 (xlsx-js-style 필요) ─────────────────────
+function _applyRedCells(ws, questionColPrefixes) {
+    if (typeof XLSX === 'undefined' || !ws || !ws['!ref']) return;
+    questionColPrefixes = questionColPrefixes || ['Q', 'BISQR'];
+    var range = XLSX.utils.decode_range(ws['!ref']);
+    var redFill = { patternType: 'solid', fgColor: { rgb: 'FFCCCC' } };
+
+    // 헤더 행에서 질문 컬럼 찾기
+    var qCols = {};
+    for (var C = range.s.c; C <= range.e.c; C++) {
+        var hAddr = XLSX.utils.encode_cell({ r: range.s.r, c: C });
+        var hCell = ws[hAddr];
+        if (hCell && hCell.v != null) {
+            var hv = String(hCell.v);
+            for (var pi = 0; pi < questionColPrefixes.length; pi++) {
+                if (hv.indexOf(questionColPrefixes[pi]) === 0) {
+                    qCols[C] = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // 데이터 행에 빨간색 적용
+    for (var R = range.s.r + 1; R <= range.e.r; R++) {
+        for (var C2 = range.s.c; C2 <= range.e.c; C2++) {
+            var addr = XLSX.utils.encode_cell({ r: R, c: C2 });
+            var cell = ws[addr];
+            var isQCol = !!qCols[C2];
+
+            if (cell && cell.v === 'N/A') {
+                // 답변없음 명시 선택 → 빨간색
+                cell.s = { fill: redFill };
+            } else if (isQCol && (!cell || cell.v === '' || cell.v == null)) {
+                // 질문 컬럼인데 미응답 → 빨간색
+                ws[addr] = { t: 's', v: '', s: { fill: redFill } };
+            }
+        }
+    }
+}
+
 // ── 통합 Excel 출력 (전체 환자) ───────────────────────────────────────────────
 function snExportAllResults() {
     if (typeof XLSX === 'undefined') {
@@ -490,14 +551,14 @@ function snExportAllResults() {
     const wb    = XLSX.utils.book_new();
     const today = new Date().toISOString().split('T')[0];
 
-    // ── 시트 1: 결과 요약 (환자별 1행) ──
+    // ── 시트 1: 결과 요약 (환자별 1행) ── (WP2: 검사일 제거)
     const summaryRows = patients.map(({ session: s, results: r }) => {
         const row = {
             '환자번호': s.patientId,
+            '환자이름': s.patientName || '',
             '생년월일': s.birthdate,
             '만나이':   s.age,
-            '두통여부': s.hasHeadache ? '예' : '아니오',
-            '검사일':   today
+            '두통여부': s.hasHeadache ? '예' : '아니오'
         };
         if (r.SDQ)      { row['SDQ_총점']      = r.SDQ.score; }
         if (r.KCSHQ)    {
@@ -515,59 +576,138 @@ function snExportAllResults() {
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), '결과요약');
 
-    // ── 시트 2: SDQ 상세 ──
-    const sdqRows = patients.filter(p => p.results.SDQ).map(({ results: r }) => {
-        const row = { '환자번호': r.SDQ.patientId, '생년월일': r.SDQ.birthdate, '만나이': r.SDQ.age };
-        Object.entries(r.SDQ.answers || {}).forEach(([k, v]) => { row[`Q${k}`] = v; });
+    // ── 시트 2: SDQ 상세 ── (WP4: Q1~Q25 모두 포함, 빨간색 적용)
+    const sdqRows = patients.filter(p => p.results.SDQ).map(({ session: s, results: r }) => {
+        const row = { '환자번호': r.SDQ.patientId, '환자이름': s.patientName || '', '생년월일': r.SDQ.birthdate, '만나이': r.SDQ.age };
+        for (let i = 1; i <= 25; i++) {
+            row[`Q${i}`] = (r.SDQ.answers || {})[i] ?? '';
+        }
         row['총점'] = r.SDQ.score;
         return row;
     });
-    if (sdqRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sdqRows), 'SDQ');
+    if (sdqRows.length) {
+        const sdqWs = XLSX.utils.json_to_sheet(sdqRows);
+        _applyRedCells(sdqWs);
+        XLSX.utils.book_append_sheet(wb, sdqWs, 'SDQ');
+    }
 
-    // ── 시트 3: K-CSHQ 상세 ──
-    const kcshqRows = patients.filter(p => p.results.KCSHQ).map(({ results: r }) => {
-        const row = { '환자번호': r.KCSHQ.patientId, '생년월일': r.KCSHQ.birthdate, '만나이': r.KCSHQ.age };
+    // ── 시트 3: K-CSHQ 상세 ── (WP4: 빨간색 적용)
+    const KCSHQ_QNS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,35,36,37,38,39,40,41,42,43,44,45,'46. 1.','46. 2.','46. 3.','46. 4.'];
+    const kcshqRows = patients.filter(p => p.results.KCSHQ).map(({ session: s, results: r }) => {
+        const row = { '환자번호': r.KCSHQ.patientId, '환자이름': s.patientName || '', '생년월일': r.KCSHQ.birthdate, '만나이': r.KCSHQ.age };
         const sc  = r.KCSHQ.scores || {};
         Object.assign(row, { 'A영역': sc.A, 'B영역': sc.B, 'C영역': sc.C, 'D영역': sc.D, 'E영역': sc.E, '총점': sc.total });
         const sub = r.KCSHQ.subjective || {};
-        if (sub.bedtime)  row['취침시각']   = sub.bedtime;
-        if (sub.duration) row['수면시간']   = sub.duration;
-        if (sub.pain)     row['통증부위']   = sub.pain;
-        if (sub.awake)    row['깬시간(분)'] = sub.awake;
-        if (sub.wakeup)   row['기상시각']   = sub.wakeup;
-        Object.entries(r.KCSHQ.answers || {}).forEach(([k, v]) => { row[`Q${k}`] = v; });
+        row['취침시각']   = sub.bedtime  ?? '';
+        row['수면시간']   = sub.duration ?? '';
+        row['통증부위']   = sub.pain     ?? '';
+        row['깬시간(분)'] = sub.awake    ?? '';
+        row['기상시각']   = sub.wakeup   ?? '';
+        KCSHQ_QNS.forEach(qn => {
+            row[`Q${qn}`] = (r.KCSHQ.answers || {})[qn] ?? '';
+        });
         return row;
     });
-    if (kcshqRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kcshqRows), 'K-CSHQ');
+    if (kcshqRows.length) {
+        const kcshqWs = XLSX.utils.json_to_sheet(kcshqRows);
+        _applyRedCells(kcshqWs);
+        XLSX.utils.book_append_sheet(wb, kcshqWs, 'K-CSHQ');
+    }
 
-    // ── 시트 4: PED-MIDAS 상세 ──
-    const pedRows = patients.filter(p => p.results.PEDMIDAS).map(({ results: r }) => {
-        const row = { '환자번호': r.PEDMIDAS.patientId, '생년월일': r.PEDMIDAS.birthdate, '만나이': r.PEDMIDAS.age };
-        Object.entries(r.PEDMIDAS.answers || {}).forEach(([k, v]) => { row[`Q${k}`] = v; });
+    // ── 시트 4: PED-MIDAS 상세 ── (WP4: Q1~Q6 모두 포함, 빨간색 적용)
+    const pedRows = patients.filter(p => p.results.PEDMIDAS).map(({ session: s, results: r }) => {
+        const row = { '환자번호': r.PEDMIDAS.patientId, '환자이름': s.patientName || '', '생년월일': r.PEDMIDAS.birthdate, '만나이': r.PEDMIDAS.age };
+        for (let i = 1; i <= 6; i++) {
+            row[`Q${i}`] = (r.PEDMIDAS.answers || {})[i] ?? '';
+        }
         row['총점'] = r.PEDMIDAS.score;
         return row;
     });
-    if (pedRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pedRows), 'PED-MIDAS');
+    if (pedRows.length) {
+        const pedWs = XLSX.utils.json_to_sheet(pedRows);
+        _applyRedCells(pedWs);
+        XLSX.utils.book_append_sheet(wb, pedWs, 'PED-MIDAS');
+    }
 
-    // ── 시트 5: BISQ-R 상세 ──
-    const bisqrRows = patients.filter(p => p.results.BISQR).map(({ results: r }) => {
-        const row = { '환자번호': r.BISQR.patientId, '생년월일': r.BISQR.birthdate, '만나이': r.BISQR.age };
-        Object.entries(r.BISQR.answers || {}).forEach(([k, v]) => { row[k] = v; });
+    // ── 시트 5: BISQ-R 상세 ── (WP4: BISQR0~33 모두 포함, 빨간색 적용)
+    const bisqrRows = patients.filter(p => p.results.BISQR).map(({ session: s, results: r }) => {
+        const row = { '환자번호': r.BISQR.patientId, '환자이름': s.patientName || '', '생년월일': r.BISQR.birthdate, '만나이': r.BISQR.age };
+        for (let i = 0; i <= 33; i++) {
+            const key = `BISQR${i}`;
+            row[key] = (r.BISQR.answers || {})[key] ?? '';
+        }
         return row;
     });
-    if (bisqrRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bisqrRows), 'BISQ-R');
+    if (bisqrRows.length) {
+        const bisqrWs = XLSX.utils.json_to_sheet(bisqrRows);
+        _applyRedCells(bisqrWs, ['BISQR']);
+        XLSX.utils.book_append_sheet(wb, bisqrWs, 'BISQ-R');
+    }
 
-    // ── 시트 6: PDSS 상세 ──
-    const pdssRows = patients.filter(p => p.results.PDSS).map(({ results: r }) => {
-        const row = { '환자번호': r.PDSS.patientId, '생년월일': r.PDSS.birthdate, '만나이': r.PDSS.age };
-        Object.entries(r.PDSS.answers || {}).forEach(([k, v]) => { row[`Q${k}`] = v; });
+    // ── 시트 6: PDSS 상세 ── (WP4: Q1~Q8 모두 포함, 빨간색 적용)
+    const pdssRows = patients.filter(p => p.results.PDSS).map(({ session: s, results: r }) => {
+        const row = { '환자번호': r.PDSS.patientId, '환자이름': s.patientName || '', '생년월일': r.PDSS.birthdate, '만나이': r.PDSS.age };
+        for (let i = 1; i <= 8; i++) {
+            row[`Q${i}`] = (r.PDSS.answers || {})[i] ?? '';
+        }
         row['총점'] = r.PDSS.score;
         return row;
     });
-    if (pdssRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pdssRows), 'PDSS');
+    if (pdssRows.length) {
+        const pdssWs = XLSX.utils.json_to_sheet(pdssRows);
+        _applyRedCells(pdssWs);
+        XLSX.utils.book_append_sheet(wb, pdssWs, 'PDSS');
+    }
 
     XLSX.writeFile(wb, `SleepSurvey_${today}.xlsx`);
 
     // 출력 후 누적 데이터 초기화
     localStorage.removeItem(SN_ALL_KEY);
+}
+
+// ── WP5-2: BISQ-R 별도 엑셀 저장 (Dataset 양식) ─────────────────────────────
+function snExportBISQRResults() {
+    if (typeof XLSX === 'undefined') {
+        alert('Excel 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+        return;
+    }
+
+    const all = snGetAllResults();
+    const curSession = snGetSession();
+    const curResults = snGetResults();
+    const patients = [...all];
+    if (curSession && curResults && curResults.BISQR) {
+        patients.push({ session: curSession, results: curResults });
+    }
+
+    const bisqrPatients = patients.filter(p => p.results && p.results.BISQR);
+
+    if (bisqrPatients.length === 0) {
+        alert('저장된 BISQ-R 결과가 없습니다.\n먼저 BISQ-R 설문을 완료해주세요.');
+        return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Dataset 양식: 환자 메타데이터 + 각 문항 응답값 (WP2: 검사일 제거)
+    const rows = bisqrPatients.map(({ session: s, results: r }) => {
+        const row = {
+            '환자번호':  r.BISQR.patientId,
+            '환자이름':  s.patientName || '',
+            '생년월일':  r.BISQR.birthdate,
+            '만나이':    r.BISQR.age
+        };
+        // 문항별 응답 (BISQR0 ~ BISQR33)
+        for (let i = 0; i <= 33; i++) {
+            const key = `BISQR${i}`;
+            row[key] = (r.BISQR.answers || {})[key] ?? '';
+        }
+        return row;
+    });
+
+    const wb = XLSX.utils.book_new();
+    const bisqrDataWs = XLSX.utils.json_to_sheet(rows);
+    _applyRedCells(bisqrDataWs, ['BISQR']);
+    XLSX.utils.book_append_sheet(wb, bisqrDataWs, 'BISQ-R Dataset');
+    XLSX.writeFile(wb, `BISQR_Dataset_${today}.xlsx`);
 }

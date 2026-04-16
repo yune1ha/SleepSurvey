@@ -331,6 +331,14 @@
     " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
         결과 출력 (Excel 통합 파일)
     </button>
+    <button onclick="snExportBISQRResults()" style="
+        margin-top:10px; padding:11px 28px;
+        background:#17a2b8; color:#fff; border:none; border-radius:8px;
+        font-size:0.95em; font-weight:bold; cursor:pointer;
+        font-family:inherit; transition:opacity 0.2s;
+    " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+        BISQ-R 별도 저장 (Excel)
+    </button>
     <p style="margin-top:12px;font-size:0.85em;color:#888;">새 환자를 입력하려면 아래 양식을 작성해주세요.</p>
 </div>
 
@@ -351,6 +359,11 @@
         <input type="text" id="patient-id" placeholder="환자번호 입력 (숫자)" inputmode="numeric"
                oninput="this.value=this.value.replace(/[^0-9]/g,''); validateForm()">
         <div class="error-msg" id="err-id">환자번호를 입력해주세요.</div>
+    </div>
+
+    <div class="field-group">
+        <label for="patient-name">환자 이름 <span style="font-weight:normal;color:#aaa;font-size:0.88em;">(선택)</span></label>
+        <input type="text" id="patient-name" placeholder="환자 이름 입력">
     </div>
 
     <div class="field-group">
@@ -450,8 +463,9 @@
             const info = document.getElementById('session-banner-info');
             const surveyNames = existing.surveys.map(f => SURVEY_META[f]?.name.split('—')[0].trim() || f);
             const idx = existing.currentSurveyIndex;
+            const nameStr = existing.patientName ? ` · ${existing.patientName}` : '';
             info.textContent =
-                `환자번호 ${existing.patientId} · 만 ${existing.age}세 · ` +
+                `환자번호 ${existing.patientId}${nameStr} · 만 ${existing.age}세 · ` +
                 `진행 중: ${surveyNames[idx] || '완료'} (${idx + 1}/${existing.surveys.length})`;
             document.getElementById('session-banner').style.display = 'block';
         }
@@ -511,16 +525,15 @@
     // ─── 설문 배정 ───────────────────────────────────────────
     function assignSurveys(age, hasHeadache) {
         if (age >= 6) {
-            // 만 6세 이상: (PED-MIDAS, 두통 시) → PDSS → SDQ → K-CSHQ
+            // 6세 이상: PED-MIDAS -> PDSS -> SDQ -> K-CSHQ
             const surveys = [];
             if (hasHeadache) surveys.push('PED_MIDAS.html');
             surveys.push('PDSS.html', 'SDQ.html', 'K-CSHQ.html');
             return surveys;
         } else {
-            // 만 6세 미만: (PED-MIDAS, 두통 시) → K-CSHQ → BISQ-R
-            const surveys = [];
+            // 6세 미만: K-CSHQ -> BISQ-R
+            const surveys = ['K-CSHQ.html', 'BISQ-R.html'];
             if (hasHeadache) surveys.push('PED_MIDAS.html');
-            surveys.push('K-CSHQ.html', 'BISQ-R.html');
             return surveys;
         }
     }
@@ -556,8 +569,11 @@
         // 이전 환자의 설문 결과 초기화
         localStorage.removeItem('sleepSurvey_results');
 
+        const nameVal = document.getElementById('patient-name').value.trim();
+
         const session = {
             patientId: idVal,
+            patientName: nameVal,
             birthdate: bday,
             age: age,
             hasHeadache: headacheSelected,
@@ -574,7 +590,7 @@
         document.getElementById('btn-new-patient').style.display = 'block';
 
         document.getElementById('result-patient-tag').textContent =
-            `환자번호 ${session.patientId} · 만 ${session.age}세`;
+            `환자번호 ${session.patientId}${session.patientName ? ' · ' + session.patientName : ''} · 만 ${session.age}세`;
 
         const container = document.getElementById('survey-cards');
         container.innerHTML = '';
@@ -619,6 +635,7 @@
         localStorage.removeItem('sleepSurvey_results');
         headacheSelected = null;
         document.getElementById('patient-id').value = '';
+        document.getElementById('patient-name').value = '';
         document.getElementById('birthdate').value = '';
         document.getElementById('age-display').textContent = '생년월일 입력 시 만 나이가 표시됩니다';
         document.getElementById('age-display').style.cssText = '';

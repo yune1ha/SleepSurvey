@@ -4,40 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PED-MIDAS 설문 프로그램</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="../js/survey-nav.js"></script>
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
         .container { display: flex; gap: 25px; max-width: 1300px; margin: auto; }
         .survey-section { flex: 2.5; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         .control-section { flex: 1; background: #f1f3f5; padding: 25px; border-radius: 12px; position: sticky; top: 20px; height: fit-content; border: 1px solid #dee2e6; }
-        
+
         h2 { border-bottom: 3px solid #007bff; padding-bottom: 12px; margin-top: 0; color: #0056b3; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #dee2e6; padding: 15px; text-align: center; }
         th { background-color: #e9ecef; font-weight: bold; }
-        .question-text { text-align: left; width: 70%; font-size: 1.05em; line-height: 1.4; }
-        
-        /* 숫자 입력 필드 스타일 */
-        .input-number { 
-            width: 80px; 
-            padding: 8px; 
-            font-size: 1.1em; 
-            text-align: center; 
-            border: 2px solid #ced4da; 
+        .question-text { text-align: left; width: 65%; font-size: 1.05em; line-height: 1.4; }
+
+        .input-number {
+            width: 80px;
+            padding: 8px;
+            font-size: 1.1em;
+            text-align: center;
+            border: 2px solid #ced4da;
             border-radius: 4px;
         }
+        .input-number:disabled { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .na-check-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 6px;
+            font-size: 0.85em;
+            color: #c0392b;
+            cursor: pointer;
+        }
+        .na-check-label input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #e03131; }
 
-        .input-group { margin-bottom: 25px; }
-        .input-group label { display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1em; }
-        input[type="text"] { width: 100%; padding: 12px; border: 2px solid #ced4da; border-radius: 6px; font-size: 1.1em; }
-        
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
         button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1em; transition: 0.2s; }
-        
+
         .btn-calc { background-color: #28a745; color: white; width: 100%; font-size: 1.2em; margin-bottom: 10px; }
         .btn-nav { background-color: #007bff; color: white; flex: 1; }
-        .btn-save { background-color: #17a2b8; color: white; width: 100%; margin-top: 10px; }
         .btn-reset { background-color: #6c757d; color: white; flex: 1; }
         .btn-exit { background-color: #dc3545; color: white; flex: 1; }
         button:hover { opacity: 0.85; transform: translateY(-1px); }
@@ -55,7 +60,7 @@
     <div class="survey-section">
         <h2>PED-MIDAS 설문</h2>
         <p style="color: #666;">※ 지난 3개월 동안의 두통 영향에 대해 해당되는 숫자를 기입해 주세요.</p>
-        
+
         <table>
             <thead>
                 <tr>
@@ -77,12 +82,12 @@
             <div class="score-unit">점</div>
         </div>
 
+        <button class="btn-calc" onclick="calcAndSave()">점수 계산 및 저장</button>
+
         <div class="btn-group">
             <button class="btn-reset" onclick="resetCurrentForm()">초기화</button>
             <button class="btn-exit" onclick="snGoHome()">홈으로</button>
         </div>
-
-        <button class="btn-calc" onclick="processEntry()" style="margin-top:10px;">점수 계산</button>
     </div>
 </div>
 
@@ -109,8 +114,15 @@
             document.getElementById('current-patient-id').innerText = saved.patientId || '-';
             document.getElementById('current-score').innerText = saved.score ?? 0;
             Object.entries(saved.answers || {}).forEach(([qId, val]) => {
-                const input = document.getElementById(`q${qId}`);
-                if (input) input.value = val;
+                if (val === 'N/A') {
+                    const cb = document.getElementById(`na${qId}`);
+                    const inp = document.getElementById(`q${qId}`);
+                    if (cb) cb.checked = true;
+                    if (inp) { inp.disabled = true; inp.value = ''; }
+                } else {
+                    const input = document.getElementById(`q${qId}`);
+                    if (input) input.value = val;
+                }
             });
         }
     });
@@ -121,10 +133,29 @@
         row.innerHTML = `
             <td>${q.id}</td>
             <td class="question-text">${q.text}</td>
-            <td><input type="number" id="q${q.id}" class="input-number" min="0" placeholder="0"></td>
+            <td>
+                <input type="number" id="q${q.id}" class="input-number" min="0" placeholder="0">
+                <br>
+                <label class="na-check-label">
+                    <input type="checkbox" id="na${q.id}" onchange="toggleNA(${q.id})"> 답변없음
+                </label>
+            </td>
         `;
         tbody.appendChild(row);
     });
+
+    function toggleNA(qid) {
+        var cb  = document.getElementById('na' + qid);
+        var inp = document.getElementById('q' + qid);
+        inp.disabled = cb.checked;
+        if (cb.checked) inp.value = '';
+    }
+
+    // ── 점수 계산 및 저장 버튼 클릭 ──────────────────────────────────────────
+    function calcAndSave() {
+        var msg = window.snAutoSave();
+        _snShowToast(msg || '저장되었습니다', 2500);
+    }
 
     function processEntry() {
         const sess = snGetSession();
@@ -136,24 +167,20 @@
         let missing = false;
 
         questions.forEach(q => {
+            const cb = document.getElementById(`na${q.id}`);
+            if (cb && cb.checked) { logs[q.id] = 'N/A'; return; }
             const valInput = document.getElementById(`q${q.id}`).value;
             if (valInput === "") { missing = true; return; }
-            
             let val = parseInt(valInput);
             score += val;
             logs[q.id] = val;
         });
 
-        if (missing) { alert("모든 문항에 숫자를 기입해주세요. (없으면 0 입력)"); return; }
+        if (missing) { alert("모든 문항에 숫자를 기입해주세요. (없으면 0 입력, 응답 불가 시 '답변없음' 체크)"); return; }
 
         const found = db.findIndex(p => p.id === id);
-        if (found > -1) {
-            db[found] = { id, score, logs };
-            curIdx = found;
-        } else {
-            db.push({ id, score, logs });
-            curIdx = db.length - 1;
-        }
+        if (found > -1) { db[found] = { id, score, logs }; curIdx = found; }
+        else { db.push({ id, score, logs }); curIdx = db.length - 1; }
 
         document.getElementById('current-patient-id').innerText = id;
         document.getElementById('current-score').innerText = score;
@@ -162,7 +189,6 @@
             patientId: id,
             birthdate: sess ? sess.birthdate : '',
             age:       sess ? sess.age       : '',
-            date:      new Date().toISOString().split('T')[0],
             score:     score,
             answers:   logs
         });
@@ -170,12 +196,11 @@
         alert(`환자 ${id}의 데이터가 저장되었습니다. 총점: ${score}점`);
     }
 
-    // changePatient() 제거 — 설문 간 이동은 snGoToPrev/snGoToNext 로 대체
-
     function clearUI() {
         document.getElementById('current-patient-id').innerText = "-";
         document.getElementById('current-score').innerText = "0";
-        document.querySelectorAll('.input-number').forEach(i => i.value = "");
+        document.querySelectorAll('.input-number').forEach(i => { i.value = ""; i.disabled = false; });
+        document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
     }
 
     function resetCurrentForm() {
@@ -184,7 +209,28 @@
         }
     }
 
-    // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+    // ── 자동 저장 (다음 버튼 클릭 / 점수계산 버튼 클릭 시 호출) ──────────────
+    window.snAutoSave = function() {
+        var sess = snGetSession();
+        var id   = sess ? sess.patientId : '';
+        if (!id) return null;
+        var score = 0; var logs = {};
+        questions.forEach(function(q) {
+            var cb = document.getElementById('na' + q.id);
+            if (cb && cb.checked) { logs[q.id] = 'N/A'; return; }  // 답변없음
+            var el = document.getElementById('q' + q.id);
+            if (!el || el.value === '') { logs[q.id] = ''; return; }  // 미응답
+            var val = parseInt(el.value) || 0;
+            score += val; logs[q.id] = val;
+        });
+        document.getElementById('current-patient-id').innerText = id;
+        document.getElementById('current-score').innerText = score;
+        snSaveResult('PED_MIDAS.html', {
+            patientId: id, birthdate: sess.birthdate, age: sess.age,
+            score: score, answers: logs
+        });
+        return 'PED-MIDAS 총점: ' + score + '점 저장됨';
+    };
 
 </script>
 

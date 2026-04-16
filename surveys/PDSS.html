@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDSS 아동용 주간 졸림 척도</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="../js/survey-nav.js"></script>
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
@@ -16,7 +16,9 @@
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #dee2e6; padding: 12px; text-align: center; }
         th { background-color: #e9ecef; font-weight: bold; font-size: 0.95em; }
-        .question-text { text-align: left; width: 45%; font-size: 1.05em; line-height: 1.4; padding-left: 15px; }
+        .question-text { text-align: left; width: 40%; font-size: 1.05em; line-height: 1.4; padding-left: 15px; }
+        th.na-col { background-color: #fff0f0; color: #c0392b; }
+        td.na-col input[type="radio"] { accent-color: #e03131; }
 
         input[type="radio"] {
             width: 25px;
@@ -60,6 +62,7 @@
                     <th>때때로 (2)</th>
                     <th>드물게 (1)</th>
                     <th>전혀 없음 (0)</th>
+                    <th class="na-col">답변없음</th>
                 </tr>
             </thead>
             <tbody id="question-table"></tbody>
@@ -75,12 +78,12 @@
             <div class="score-unit">점</div>
         </div>
 
+        <button class="btn-calc" onclick="calcAndSave()">점수 계산 및 저장</button>
+
         <div class="btn-group">
             <button class="btn-reset" onclick="resetCurrentForm()">초기화</button>
             <button class="btn-exit" onclick="snGoHome()">홈으로</button>
         </div>
-
-        <button class="btn-calc" onclick="processEntry()" style="margin-top:10px;">점수 계산</button>
     </div>
 </div>
 
@@ -112,6 +115,7 @@
                 <td><input type="radio" name="q${q.id}" value="2"></td>
                 <td><input type="radio" name="q${q.id}" value="1"></td>
                 <td><input type="radio" name="q${q.id}" value="0"></td>
+                <td class="na-col"><input type="radio" name="q${q.id}" value="N/A"></td>
             `;
             tbody.appendChild(row);
         });
@@ -131,6 +135,12 @@
         }
     });
 
+    // ── 점수 계산 및 저장 버튼 클릭 ──────────────────────────────────────────
+    function calcAndSave() {
+        var msg = window.snAutoSave();
+        _snShowToast(msg || '저장되었습니다', 2500);
+    }
+
     function processEntry() {
         const sess = snGetSession();
         const id   = sess ? sess.patientId : '';
@@ -143,6 +153,7 @@
         questions.forEach(q => {
             const sel = document.querySelector(`input[name="q${q.id}"]:checked`);
             if (!sel) { missing = true; return; }
+            if (sel.value === 'N/A') { logs[q.id] = 'N/A'; return; }
 
             let val = parseInt(sel.value);
             if (q.reverse) val = 4 - val;
@@ -150,7 +161,7 @@
             logs[q.id] = sel.value;
         });
 
-        if (missing) { alert("모든 문항에 답변을 선택해주세요."); return; }
+        if (missing) { alert("모든 문항에 답변을 선택해주세요. (답변이 불가한 경우 '답변없음' 선택)"); return; }
 
         const found = db.findIndex(p => p.id === id);
         if (found > -1) { db[found] = { id, score, logs }; curIdx = found; }
@@ -163,7 +174,6 @@
             patientId: id,
             birthdate: sess ? sess.birthdate : '',
             age:       sess ? sess.age       : '',
-            date:      new Date().toISOString().split('T')[0],
             score:     score,
             answers:   logs
         });
@@ -181,7 +191,28 @@
         if (confirm("입력 중인 내용을 초기화하시겠습니까?")) { clearUI(); }
     }
 
-    // downloadExcel() 제거 — 통합 결과 출력(snExportAllResults)으로 대체
+    // ── 자동 저장 (다음 버튼 클릭 / 점수계산 버튼 클릭 시 호출) ──────────────
+    window.snAutoSave = function() {
+        var sess = snGetSession();
+        var id   = sess ? sess.patientId : '';
+        if (!id) return null;
+        var score = 0; var logs = {};
+        questions.forEach(function(q) {
+            var sel = document.querySelector('input[name="q' + q.id + '"]:checked');
+            if (!sel) { logs[q.id] = ''; return; }          // 미응답
+            if (sel.value === 'N/A') { logs[q.id] = 'N/A'; return; }  // 답변없음
+            var val = parseInt(sel.value);
+            if (q.reverse) val = 4 - val;
+            score += val; logs[q.id] = sel.value;
+        });
+        document.getElementById('current-patient-id').innerText = id;
+        document.getElementById('current-score').innerText = score;
+        snSaveResult('PDSS.html', {
+            patientId: id, birthdate: sess.birthdate, age: sess.age,
+            score: score, answers: logs
+        });
+        return 'PDSS 총점: ' + score + '점 저장됨';
+    };
 
 </script>
 
